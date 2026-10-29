@@ -1,0 +1,29 @@
+name: Integration feedback
+description: Share your app workflow, first-call result or integration blocker.
+body:
+  - type: textarea
+    id: workflow
+    attributes:
+      label: What did you want to connect?
+      description: Describe the workflow without including customer records or credentials.
+    validations:
+      required: true
+  - type: input
+    id: environment
+    attributes:
+      label: SDK, Node.js and Express versions
+      placeholder: 0.1.0-preview.5, Node 24, Express 4
+    validations:
+      required: true
+  - type: textarea
+    id: result
+    attributes:
+      label: How far did you get?
+      description: Include the first successful tool call or the step where you got stuck.
+    validations:
+      required: true
+  - type: textarea
+    id: reproduction
+    attributes:
+      label: Minimal reproduction or relevant error
+      description: Use fictional data. Remove tokens, keys, cookies and private URLs.
