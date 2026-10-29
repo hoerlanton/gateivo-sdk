@@ -3,7 +3,7 @@
   "version": "0.1.0-preview.5",
   "private": true,
   "description": "Expose selected read-only backend functions as authenticated MCP tools for AI assistants",
-  "license": "UNLICENSED",
+  "license": "MIT",
   "type": "module",
   "main": "./dist/index.cjs",
   "module": "./dist/index.js",

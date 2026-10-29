@@ -106,7 +106,13 @@ Use `await import('@gateivo/sdk')` during startup, before accepting requests. Th
 
 ## Installing in another backend
 
-The package name is `@gateivo/sdk`. There is no public npm registry release yet. Build and pack this repository, then install the resulting archive in your backend:
+The package name is `@gateivo/sdk`. Install the preview archive in your backend:
+
+```sh
+npm install https://github.com/hoerlanton/gateivo-sdk/releases/download/v0.1.0-preview.5/gateivo-sdk-0.1.0-preview.5.tgz
+```
+
+There is no public npm registry release yet. To build an archive locally instead:
 
 ```sh
 # In this repository, after npm ci and npm run build:
@@ -116,7 +122,7 @@ npm run pack:preview
 npm install /path/to/gateivo-sdk-0.1.0-preview.5.tgz
 ```
 
-Release archives, when published, appear on the [GitHub Releases page](https://github.com/hoerlanton/gateivo-sdk/releases). Each archive must be checked using the clean-consumer verification before release.
+Preview archives and checksums appear on the [GitHub Releases page](https://github.com/hoerlanton/gateivo-sdk/releases). Each archive must be checked using the clean-consumer verification before release.
 
 ## Current scope
 
@@ -149,3 +155,7 @@ npm run demo
 For maintainers, `npm run verify:release` checks the packed archive against both runtime verification reports and the current distribution/example files. It also requires licence metadata and a licence file. See the contributing guide for the release sequence.
 
 See [the contributing guide](https://github.com/hoerlanton/gateivo-sdk/blob/main/CONTRIBUTING.md) for development notes and [SECURITY.md](SECURITY.md) for vulnerability reports.
+
+## Licence
+
+[MIT](LICENSE) · Copyright (c) 2026 SAGLY GmbH.
