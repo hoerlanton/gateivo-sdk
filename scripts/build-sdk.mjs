@@ -24,6 +24,8 @@ await build({
     express: 'src/http.ts',
     oauth: 'src/sdk-oauth.ts',
     'workos-connect': 'src/workos-connect.ts',
+    'workos-connect-express': 'src/workos-connect-express.ts',
+    'workos-connect-postgres': 'src/workos-connect-postgres.ts',
   },
   format: ['esm', 'cjs'],
   platform: 'node',

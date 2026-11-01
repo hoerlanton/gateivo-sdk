@@ -1,6 +1,6 @@
 {
   "name": "@gateivo/sdk",
-  "version": "0.1.0-preview.5",
+  "version": "0.1.0-preview.6",
   "private": true,
   "description": "Expose selected read-only backend functions as authenticated MCP tools for AI assistants",
   "license": "MIT",
@@ -58,6 +58,26 @@
         "types": "./dist/workos-connect.d.cts",
         "default": "./dist/workos-connect.cjs"
       }
+    },
+    "./workos-connect/express": {
+      "import": {
+        "types": "./dist/workos-connect-express.d.ts",
+        "default": "./dist/workos-connect-express.js"
+      },
+      "require": {
+        "types": "./dist/workos-connect-express.d.cts",
+        "default": "./dist/workos-connect-express.cjs"
+      }
+    },
+    "./workos-connect/postgres": {
+      "import": {
+        "types": "./dist/workos-connect-postgres.d.ts",
+        "default": "./dist/workos-connect-postgres.js"
+      },
+      "require": {
+        "types": "./dist/workos-connect-postgres.d.cts",
+        "default": "./dist/workos-connect-postgres.cjs"
+      }
     }
   },
   "files": [
@@ -65,6 +85,8 @@
     "README.md",
     "LICENSE",
     "docs/authentication.md",
+    "docs/workos-connection.md",
+    "docs/workos-reference.md",
     "SECURITY.md"
   ],
   "engines": {
@@ -101,6 +123,7 @@
     "verify:release": "node scripts/verify-release.mjs",
     "test:workos": "node --import tsx --test tests/workos-reference*.test.*",
     "verify:workos": "node scripts/verify-workos-reference.mjs",
+    "verify:workos:postgres": "node scripts/verify-workos-reference.mjs --postgres",
     "reference:setup": "node examples/workos-reference/setup.mjs",
     "reference:start": "node examples/workos-reference/host.mjs"
   },

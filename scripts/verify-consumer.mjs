@@ -60,6 +60,8 @@ const typesFixture = `import { defineAction, createActionRegistry, type Principa
 import { AccessError } from '@gateivo/sdk/core';
 import { createAgentRouter, type AgentRouterOptions } from '@gateivo/sdk/express';
 import { createOAuthResource } from '@gateivo/sdk/oauth';
+import { createWorkOSConnection } from '@gateivo/sdk/workos-connect/express';
+import { createWorkOSPostgresStore } from '@gateivo/sdk/workos-connect/postgres';
 import { z } from 'zod/v4';
 
 const action = defineAction({
@@ -98,6 +100,63 @@ const options: AgentRouterOptions = {
 createAgentRouter(options);
 createOAuthResource({ resource: options.resource, authorizationServers: ['https://issuer.example'], scopesSupported: ['workouts:read'] });
 void new AccessError('FORBIDDEN');
+
+// These contracts must be usable from an independently installed archive with
+// no copied composition source, provider SDK, pg declarations or permissive any.
+type ConnectionOptions = Parameters<typeof createWorkOSConnection>[0];
+type IsAny<Value> = 0 extends (1 & Value) ? true : false;
+const connectionOptionsAreTyped: IsAny<ConnectionOptions> = false;
+const sessionRequestIsTyped: IsAny<Parameters<ConnectionOptions['authenticateSession']>[0]> = false;
+const sessionResultIsTyped: IsAny<Awaited<ReturnType<ConnectionOptions['authenticateSession']>>> = false;
+const accountResultIsTyped: IsAny<Awaited<ReturnType<ConnectionOptions['resolveAccount']>>> = false;
+const lifecycleStoreIsTyped: IsAny<ConnectionOptions['store']> = false;
+declare const pool: Parameters<typeof createWorkOSPostgresStore>[0]['pool'];
+const connectionStore = createWorkOSPostgresStore({ pool, schema: 'gateivo_consumer' });
+const connectionOptions: ConnectionOptions = {
+  appId: 'workouts', publicUrl: 'https://publisher.example', issuer: 'https://issuer.example',
+  clientId: 'client_reference123456', applicationId: 'connect_app_reference123456',
+  apiKey: 'synthetic-provider-key', accessTokenType: null, requiredScopes: ['workouts:read'],
+  secret: new Uint8Array(32), store: connectionStore, mountMcp: false,
+  authenticateSession: async (request, context) => {
+    const method: string = request.method;
+    context.signal.throwIfAborted();
+    return { sessionId: 'opaque-session', authVersion: '1', appSubject: 'local-account',
+      accountLabel: method, expiresAt: Date.now() + 1000 };
+  },
+  resolveAccount: async (account, context) => {
+    const subject: string = account.appSubject;
+    const issuer: string = account.issuer;
+    context.signal.throwIfAborted();
+    void subject; void issuer;
+    return { providerSubject: 'user_reference123456', enabled: true };
+  },
+};
+const connection = createWorkOSConnection(connectionOptions);
+const linkedPrincipal: Promise<Principal | null> = connection.verifyToken('token', {
+  audience: 'https://publisher.example/agent/mcp', signal: AbortSignal.timeout(1000),
+});
+connection.isAuthorized({ appId: 'workouts', subject: 'local-account', scopes: ['workouts:read'],
+  expiresAt: Date.now() + 1000 }, { signal: AbortSignal.timeout(1000) });
+connectionStore.migrate(); connectionStore.checkReady(); connectionStore.close();
+const { authenticateSession: omittedSession, ...withoutSession } = connectionOptions;
+// @ts-expect-error Existing application authentication is mandatory.
+createWorkOSConnection(withoutSession);
+const { resolveAccount: omittedAccount, ...withoutAccount } = connectionOptions;
+// @ts-expect-error A trusted, existing account binding is mandatory.
+createWorkOSConnection(withoutAccount);
+// @ts-expect-error A partial store cannot silently omit durable lifecycle methods.
+createWorkOSConnection({ ...connectionOptions, store: {} });
+// @ts-expect-error Session expiry must be numeric Unix milliseconds.
+const wrongSession: ConnectionOptions['authenticateSession'] = async () => ({ sessionId: 's', authVersion: '1', appSubject: 'a', accountLabel: 'A', expiresAt: 'tomorrow' });
+// @ts-expect-error Account enabled status must be boolean.
+const wrongAccount: ConnectionOptions['resolveAccount'] = async () => ({ providerSubject: 'user_reference123456', enabled: 'yes' });
+// @ts-expect-error Lifecycle access checks require a cancellation context.
+connection.isAuthorized({ appId: 'workouts', subject: 'a', scopes: [], expiresAt: 1 });
+// @ts-expect-error Pool checkout must return a typed query/release client.
+createWorkOSPostgresStore({ pool: { connect: async () => ({}) } });
+void connectionOptionsAreTyped; void sessionRequestIsTyped; void sessionResultIsTyped;
+void accountResultIsTyped; void lifecycleStoreIsTyped; void linkedPrincipal;
+void omittedSession; void omittedAccount; void wrongSession; void wrongAccount;
 `;
 
 // A real CommonJS host loads the package's ESM graph before mounting routes.
@@ -109,17 +168,23 @@ const bootstrapFixture = String.raw`const assert = require('node:assert/strict')
   const expressEntry = await import('@gateivo/sdk/express');
   const oauth = await import('@gateivo/sdk/oauth');
   const workos = await import('@gateivo/sdk/workos-connect');
+  const connection = await import('@gateivo/sdk/workos-connect/express');
+  const postgres = await import('@gateivo/sdk/workos-connect/postgres');
   const example = await import('./index.mjs');
   assert.equal(sdk.AccessError, core.AccessError);
   assert.equal(sdk.createAgentRouter, expressEntry.createAgentRouter);
   assert.equal(sdk.createOAuthResource, oauth.createOAuthResource);
   assert.equal(typeof workos.createWorkOSConnectVerifier, 'function');
   assert.equal(typeof workos.createWorkOSConnectProvider, 'function');
+  assert.deepEqual(Object.keys(connection), ['createWorkOSConnection']);
+  assert.deepEqual(Object.keys(postgres), ['createWorkOSPostgresStore']);
   assert.equal(typeof example.createWorkoutExample, 'function');
   const commonCore = require('@gateivo/sdk/core');
   const commonExpress = require('@gateivo/sdk/express');
+  const commonPostgres = require('@gateivo/sdk/workos-connect/postgres');
   assert.deepEqual(Object.keys(commonCore).sort(), Object.keys(core).sort());
   assert.deepEqual(Object.keys(commonExpress).sort(), Object.keys(expressEntry).sort());
+  assert.deepEqual(Object.keys(commonPostgres).sort(), Object.keys(postgres).sort());
   assert.ok(new commonCore.AccessError('NOT_FOUND') instanceof commonCore.AccessError);
   if (process.versions.node.split('.')[0] === '24') {
     const common = require('@gateivo/sdk');
@@ -128,6 +193,8 @@ const bootstrapFixture = String.raw`const assert = require('node:assert/strict')
     assert.equal(common.createOAuthResource, require('@gateivo/sdk/oauth').createOAuthResource);
     assert.deepEqual(Object.keys(common).sort(), Object.keys(sdk).sort());
     assert.deepEqual(Object.keys(require('@gateivo/sdk/workos-connect')).sort(), Object.keys(workos).sort());
+    assert.deepEqual(Object.keys(require('@gateivo/sdk/workos-connect/express')).sort(), Object.keys(connection).sort());
+    assert.deepEqual(Object.keys(require('@gateivo/sdk/workos-connect/postgres')).sort(), Object.keys(postgres).sort());
   }
   await import('./verify-runtime.mjs');
 })().catch((error) => {
@@ -240,7 +307,7 @@ async function assertCliExit() {
 }
 
 try {
-  for (const subpath of ['', '/core', '/express', '/oauth', '/workos-connect']) {
+  for (const subpath of ['', '/core', '/express', '/oauth', '/workos-connect', '/workos-connect/express', '/workos-connect/postgres']) {
     const resolved = await realpath(require.resolve('@gateivo/sdk' + subpath));
     assert.ok(below(path.join(directory, 'node_modules/@gateivo/sdk'), resolved), 'Package resolves inside isolated installed SDK');
   }
@@ -249,7 +316,7 @@ try {
   assert.equal(sdk.createOAuthResource, oauth.createOAuthResource);
   assert.ok(new core.AccessError('NOT_FOUND') instanceof sdk.AccessError);
   assert.deepEqual(Object.keys(sdk).sort(), ['AccessError', 'createActionRegistry', 'createAgentRouter', 'createOAuthJwtVerifier', 'createOAuthResource', 'defineAction']);
-  pass('CommonJS bootstrap dynamically imports every public SDK entry and standalone example; ESM error identity and synchronous core/express exports are preserved');
+  pass('CommonJS bootstrap dynamically imports every public SDK entry, including optional Express connection and PostgreSQL factories, without a database driver or SQLite; ESM error identity is preserved');
   if (process.versions.node.split('.')[0] === '24') {
     pass('Node 24 synchronous CommonJS root, OAuth and WorkOS exports retain their public API and shared error identity');
   }
@@ -433,11 +500,11 @@ try {
   assert.equal(pack.version, manifest.version);
   const packedFiles = pack.files.map((file) => file.path).sort();
   for (const file of packedFiles) {
-    assert.ok(['package.json', 'README.md', 'LICENSE', 'NOTICE', 'SECURITY.md', 'docs/authentication.md'].includes(file) || /^dist\/[A-Za-z0-9_-]+(?:\.d\.(?:ts|cts)|\.(?:js|cjs))$/.test(file), `Unexpected tarball file: ${file}`);
+    assert.ok(['package.json', 'README.md', 'LICENSE', 'NOTICE', 'SECURITY.md', 'docs/authentication.md', 'docs/workos-connection.md', 'docs/workos-reference.md'].includes(file) || /^dist\/[A-Za-z0-9_-]+(?:\.d\.(?:ts|cts)|\.(?:js|cjs))$/.test(file), `Unexpected tarball file: ${file}`);
     assert.doesNotMatch(file, /sagly|pilot|\.env|secret|service/i);
   }
   assert.ok(packedFiles.includes('README.md'), 'Tarball must contain developer documentation');
-  for (const entry of ['index', 'core', 'express', 'oauth', 'workos-connect']) {
+  for (const entry of ['index', 'core', 'express', 'oauth', 'workos-connect', 'workos-connect-express', 'workos-connect-postgres']) {
     for (const extension of ['js', 'cjs', 'd.ts', 'd.cts']) assert.ok(packedFiles.includes(`dist/${entry}.${extension}`));
   }
   report.package = { name: pack.name, version: pack.version, integrity: pack.integrity, fileCount: packedFiles.length, files: packedFiles };
@@ -474,6 +541,10 @@ try {
   assert.ok(!Object.keys(installedLock.packages).some((name) => /(?:^|\/)node_modules\/(?:pg|@workos-inc\/node)$/.test(name)), 'Installed dependency graph must not include pilot database or provider SDK');
   const installedSdk = await realpath(path.join(consumer, 'node_modules/@gateivo/sdk'));
   assert.ok(inside(consumer, installedSdk), 'SDK must be an unpacked tarball, not a checkout symlink');
+  for (const file of packedFiles.filter((file) => /^dist\/.*\.(?:js|cjs)$/.test(file))) {
+    const code = await readFile(path.join(installedSdk, file), 'utf8');
+    assert.doesNotMatch(code, /(?:from\s*|import\s*\(|require\s*\()\s*['"](?:node:sqlite|pg)['"]/, 'Runtime archive must not import an optional host database implementation');
+  }
   report.isolatedInstallation = true;
   checks.push('Copied standalone example installs the tarball outside the checkout with no source aliases or NODE_PATH');
 
@@ -483,7 +554,7 @@ try {
     '--moduleResolution', 'NodeNext', '--target', 'ES2022', '--types', 'node', '--esModuleInterop',
     'consumer-types.mts', 'consumer-types.cts',
   ], consumer, 'Strict NodeNext ESM/CommonJS consumer declarations');
-  checks.push('Strict NodeNext ESM and CommonJS consumers preserve defineAction input/output inference and reject deliberate type errors');
+  checks.push('Strict NodeNext ESM/CommonJS consumers preserve action inference and typed connection/store contracts; missing authentication/binding hooks, wrong session/account types and partial stores are rejected');
   await writeFile(path.join(consumer, 'verify-runtime.mjs'), runtimeFixture);
   await writeFile(path.join(consumer, 'verify-bootstrap.cjs'), bootstrapFixture);
   try {

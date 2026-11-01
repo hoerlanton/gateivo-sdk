@@ -1,28 +1,15 @@
 import assert from 'node:assert/strict';
-import { mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
 import { createServer, request as httpRequest, type IncomingHttpHeaders } from 'node:http';
 import type { AddressInfo } from 'node:net';
-import { tmpdir } from 'node:os';
-import { join } from 'node:path';
-import { after, test, type TestContext } from 'node:test';
-import { pathToFileURL } from 'node:url';
+import { test, type TestContext } from 'node:test';
 import express from 'express';
 import { exportJWK, generateKeyPair, SignJWT } from 'jose';
 import { z } from 'zod/v4';
 
-// Focused source-level tests: redirect only imports to the public SDK source
-// entries. Clean archive installation remains verify-workos-reference's job.
-const directory = mkdtempSync(join(tmpdir(), 'gateivo-reference-composition-'));
-after(() => rmSync(directory, { recursive: true, force: true }));
-let source = readFileSync(new URL('../examples/workos-reference/index.mjs', import.meta.url), 'utf8');
-for (const [specifier, url] of [
-  ['@gateivo/sdk', new URL('../src/sdk.ts', import.meta.url).href],
-  ['@gateivo/sdk/workos-connect', new URL('../src/workos-connect.ts', import.meta.url).href],
-  ['express', import.meta.resolve('express')], ['jose', import.meta.resolve('jose')],
-]) source = source.replace(`from '${specifier}'`, `from '${url}'`);
-const entry = join(directory, 'reference.mjs');
-writeFileSync(entry, source);
-const { createWorkOSReference } = await import(pathToFileURL(entry).href);
+// Source-level checks exercise the same optional entry point built into the SDK.
+// Clean archive installation remains verify-workos-reference's job.
+import { createWorkOSConnection as createWorkOSReference,
+  type WorkOSConnectionOptions } from '../src/workos-connect-express.js';
 
 const PUBLIC = 'https://publisher.example.invalid';
 const ISSUER = 'https://issuer.example.invalid';
@@ -50,12 +37,16 @@ function fixture(overrides: Record<string, unknown> = {}, syntheticFetch?: typeo
       return { revision, phase: null, attemptExpiresAt: null, active: false };
     },
     async begin() { calls.begin++; throw new Error('Unexpected reset in composition test'); },
+    ...Object.fromEntries(['claimReset', 'completeReset', 'fail', 'consume', 'cancel', 'complete',
+      'resolveConsent', 'revoke'].map(name => [name, async () => {
+      throw new Error(`Unexpected ${name} in composition test`);
+    }])),
   };
   const options = {
     appId: 'example', publicUrl: PUBLIC, issuer: ISSUER,
     clientId: 'client_reference123456', applicationId: 'connect_app_reference123456',
     apiKey: 'synthetic-provider-key', accessTokenType: null, requiredScopes: ['workouts:read'],
-    secret: new Uint8Array(32).fill(7), store, trustProxyHttps: true, mountMcp: false,
+    secret: new Uint8Array(32).fill(7), trustProxyHttps: true, mountMcp: false,
     async authenticateSession() {
       calls.session++;
       return { sessionId: 'browser-session', authVersion: 'login-version', appSubject: SUBJECT,
@@ -68,8 +59,10 @@ function fixture(overrides: Record<string, unknown> = {}, syntheticFetch?: typeo
       return { enabled: true, providerSubject: PROVIDER_SUBJECT };
     },
     ...overrides,
+    store: overrides.store && typeof overrides.store === 'object'
+      ? { ...store, ...overrides.store } : ('store' in overrides ? overrides.store : store),
   };
-  const reference = createWorkOSReference(options, { fetch: async (...args: Parameters<typeof fetch>) => {
+  const reference = createWorkOSReference(options as unknown as WorkOSConnectionOptions, { fetch: async (...args: Parameters<typeof fetch>) => {
     calls.provider++;
     if (syntheticFetch) return syntheticFetch(...args);
     throw new Error('No live provider transport is allowed in this test');
@@ -262,6 +255,7 @@ test('verified delegated tokens are capped to the cutoff and cannot survive cros
     return Response.json({ keys: [jwk] });
   });
   const verified = await h.reference.verifyToken(token, { ...context(), audience: `${PUBLIC}/agent/mcp` });
+  assert.ok(verified);
   assert.equal(verified.subject, SUBJECT);
   assert.equal(verified.expiresAt, cutoff);
   expireDuringLookup = true;
@@ -308,9 +302,33 @@ test('trusted signed-subject mappings reach both delegated reads and callback ex
     return Response.json({ access_token: token, token_type: 'bearer' });
   });
   const principal = await h.reference.verifyToken(token, { ...context(), audience: `${PUBLIC}/agent/mcp` });
+  assert.ok(principal);
   assert.equal(principal.subject, SUBJECT);
   const verified = await h.reference.provider.exchangeCode({ code: 'synthetic-code-for-exchange',
     codeVerifier: 'v'.repeat(43), expectedUserId: PROVIDER_SUBJECT }, context());
   assert.equal(verified.subject, PROVIDER_SUBJECT);
   assert.equal(mapped, 2);
+});
+
+
+test('all durable store operations are required at startup', () => {
+  for (const method of ['getState', 'begin', 'claimReset', 'completeReset', 'fail',
+    'consume', 'cancel', 'complete', 'resolveConsent', 'revoke', 'isActive']) {
+    assert.throws(() => fixture({ store: { [method]: undefined } }), /complete WorkOS connection store/);
+  }
+});
+
+test('application session identifiers share the stores 256-character boundary', async t => {
+  for (const field of ['sessionId', 'authVersion']) {
+    for (const length of [256, 257]) {
+      const h = fixture({ authenticateSession: async () => ({
+        sessionId: 'browser-session', authVersion: 'login-version', appSubject: SUBJECT,
+        accountLabel: 'Synthetic account', expiresAt: Date.now() + 3600_000,
+        [field]: 'x'.repeat(length),
+      }) });
+      const request = await serve(t, h.reference);
+      assert.equal((await request('/account/assistant')).status, length === 256 ? 200 : 401);
+      assert.equal(h.calls.provider, 0);
+    }
+  }
 });

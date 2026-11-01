@@ -1,10 +1,12 @@
 # Authenticated fictional workout app
 
-This Node.js 24 / Express example adds a runnable app around Gateivo's WorkOS reference. It demonstrates app sign-in, a verified account-to-provider mapping, assistant consent, owner-scoped tools and persistent disconnect/reconnect state.
+This Node.js 24 / Express example adds a runnable app around Gateivo's optional packaged WorkOS connection module. It demonstrates app sign-in, a verified account-to-provider mapping, assistant consent, owner-scoped tools and persistent disconnect/reconnect state. The module's new imports are unreleased and are not included in the published preview.5 archive.
 
 It uses **fictional app accounts and workout records**. WorkOS and the assistant are real external services when configured. Automated acceptance uses signed synthetic provider responses; it does not establish a successful hosted WorkOS/Claude connection for your configuration.
 
 The password login here is a small fixture for the example. In your own app, keep your existing login and replace the two trusted hooks described below.
+
+For an existing Express app, start with the [connection integration guide](../../docs/workos-connection.md). The PostgreSQL path supports Node.js 22.6 within 22.x and Node.js 24 and does not need this fictional password host or SQLite. The example's `index.mjs` and `postgres-store.mjs` are thin compatibility reexports of the packaged module.
 
 ## Requirements
 

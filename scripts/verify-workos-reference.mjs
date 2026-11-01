@@ -18,7 +18,10 @@ const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
 const sdkDirectory = root;
 const exampleDirectory = path.join(root, 'examples/workos-reference');
 const postgres = process.argv.includes('--postgres');
-const reportPath = path.join(root, postgres ? 'artifacts/workos-postgres-verification.json' : 'artifacts/workos-reference-verification.json');
+const [nodeMajor, nodeMinor] = process.versions.node.split('.').map(Number);
+const reportPath = path.join(root, postgres
+  ? (nodeMajor === 22 ? 'artifacts/workos-postgres-node22-verification.json' : 'artifacts/workos-postgres-verification.json')
+  : 'artifacts/workos-reference-verification.json');
 const checks = [];
 const report = { status: 'running', checkedAt: new Date().toISOString(), node: process.version, storage: postgres ? 'postgresql' : 'sqlite', checks };
 const childEnv = { ...process.env };
@@ -48,7 +51,17 @@ async function run(program, args, cwd, label) {
   try { return await execute(program, args, { cwd, env: childEnv, timeout: 300_000, maxBuffer: 4 * 1024 * 1024 }); }
   catch (error) {
     const code = error && typeof error === 'object' && 'code' in error ? String(error.code) : 'unknown';
-    throw new Error(`${label} failed (exit ${code}). No child output was logged.`);
+    // Extract only bounded runtime classifications. Never log raw stderr,
+    // exception messages, argv, module specifiers or assertion values.
+    const stderr = typeof error?.stderr === 'string' ? error.stderr.slice(0, 8192) + error.stderr.slice(-2048) : '';
+    const errorType = /(?:^|\n)(TypeError|SyntaxError|ReferenceError|RangeError|AssertionError|Error)(?: \[|:)/.exec(stderr)?.[1];
+    const runtimeCode = /\[(ERR_[A-Z_]{1,64})\]/.exec(stderr)?.[1];
+    const fixture = /(?:^|[\/\\])(verify-(?:bootstrap|runtime)\.mjs):(\d{1,6})(?::(\d{1,6}))?/.exec(stderr);
+    const version = /Node\.js v(\d{1,2}\.\d{1,3}\.\d{1,3})/.exec(stderr)?.[1];
+    const safeDetails = [errorType, runtimeCode,
+      fixture ? `${fixture[1]}:${fixture[2]}${fixture[3] ? ':' + fixture[3] : ''}` : undefined,
+      version ? 'Node ' + version : undefined].filter(Boolean).join(', ');
+    throw new Error(`${label} failed (exit ${code}${safeDetails ? '; ' + safeDetails : ''}). No child output was logged.`);
   }
 }
 
@@ -60,6 +73,8 @@ const typesFixture = `import { createWorkOSConnectVerifier, createWorkOSConnectP
   type WorkOSConnectVerifierOptions, type WorkOSConnectProviderOptions,
   type VerifiedWorkOSConnectIdentity } from '@gateivo/sdk/workos-connect';
 import { type Principal } from '@gateivo/sdk';
+import { createWorkOSConnection } from '@gateivo/sdk/workos-connect/express';
+import { createWorkOSPostgresStore } from '@gateivo/sdk/workos-connect/postgres';
 const options: WorkOSConnectVerifierOptions = {
   appId: 'workouts', issuer: 'https://issuer.example', clientId: 'client_reference123456',
   resource: 'https://publisher.example/agent/mcp', accessTokenType: null,
@@ -92,13 +107,69 @@ createWorkOSConnectProvider({ apiKey: 'synthetic-provider-key', issuer: options.
  applicationId: 'connect_app_reference123456', resource: options.resource,
  redirectUri: providerOptions.redirectUri, accessTokenType: null });
 void principal; void identity;
+
+// These contracts must be usable from an independently installed archive with
+// no copied composition source, provider SDK, pg declarations or permissive any.
+type ConnectionOptions = Parameters<typeof createWorkOSConnection>[0];
+type IsAny<Value> = 0 extends (1 & Value) ? true : false;
+const connectionOptionsAreTyped: IsAny<ConnectionOptions> = false;
+const sessionRequestIsTyped: IsAny<Parameters<ConnectionOptions['authenticateSession']>[0]> = false;
+const sessionResultIsTyped: IsAny<Awaited<ReturnType<ConnectionOptions['authenticateSession']>>> = false;
+const accountResultIsTyped: IsAny<Awaited<ReturnType<ConnectionOptions['resolveAccount']>>> = false;
+const lifecycleStoreIsTyped: IsAny<ConnectionOptions['store']> = false;
+declare const pool: Parameters<typeof createWorkOSPostgresStore>[0]['pool'];
+const connectionStore = createWorkOSPostgresStore({ pool, schema: 'gateivo_consumer' });
+const connectionOptions: ConnectionOptions = {
+  appId: 'workouts', publicUrl: 'https://publisher.example', issuer: options.issuer,
+  clientId: options.clientId, applicationId: 'connect_app_reference123456',
+  apiKey: 'synthetic-provider-key', accessTokenType: null, requiredScopes: ['workouts:read'],
+  secret: new Uint8Array(32), store: connectionStore, mountMcp: false,
+  authenticateSession: async (request, context) => {
+    const method: string = request.method;
+    context.signal.throwIfAborted();
+    return { sessionId: 'opaque-session', authVersion: '1', appSubject: 'local-account',
+      accountLabel: method, expiresAt: Date.now() + 1000 };
+  },
+  resolveAccount: async (account, context) => {
+    const subject: string = account.appSubject;
+    const issuer: string = account.issuer;
+    context.signal.throwIfAborted();
+    void subject; void issuer;
+    return { providerSubject: 'user_reference123456', enabled: true };
+  },
+};
+const connection = createWorkOSConnection(connectionOptions);
+const linkedPrincipal: Promise<Principal | null> = connection.verifyToken('token', {
+  audience: 'https://publisher.example/agent/mcp', signal: AbortSignal.timeout(1000),
+});
+connection.isAuthorized({ appId: 'workouts', subject: 'local-account', scopes: ['workouts:read'],
+  expiresAt: Date.now() + 1000 }, { signal: AbortSignal.timeout(1000) });
+connectionStore.migrate(); connectionStore.checkReady(); connectionStore.close();
+const { authenticateSession: omittedSession, ...withoutSession } = connectionOptions;
+// @ts-expect-error Existing application authentication is mandatory.
+createWorkOSConnection(withoutSession);
+const { resolveAccount: omittedAccount, ...withoutAccount } = connectionOptions;
+// @ts-expect-error A trusted, existing account binding is mandatory.
+createWorkOSConnection(withoutAccount);
+// @ts-expect-error A partial store cannot silently omit durable lifecycle methods.
+createWorkOSConnection({ ...connectionOptions, store: {} });
+// @ts-expect-error Session expiry must be numeric Unix milliseconds.
+const wrongSession: ConnectionOptions['authenticateSession'] = async () => ({ sessionId: 's', authVersion: '1', appSubject: 'a', accountLabel: 'A', expiresAt: 'tomorrow' });
+// @ts-expect-error Account enabled status must be boolean.
+const wrongAccount: ConnectionOptions['resolveAccount'] = async () => ({ providerSubject: 'user_reference123456', enabled: 'yes' });
+// @ts-expect-error Lifecycle access checks require a cancellation context.
+connection.isAuthorized({ appId: 'workouts', subject: 'a', scopes: [], expiresAt: 1 });
+// @ts-expect-error Pool checkout must return a typed query/release client.
+createWorkOSPostgresStore({ pool: { connect: async () => ({}) } });
+void connectionOptionsAreTyped; void sessionRequestIsTyped; void sessionResultIsTyped;
+void accountResultIsTyped; void lifecycleStoreIsTyped; void linkedPrincipal;
+void omittedSession; void omittedAccount; void wrongSession; void wrongAccount;
 `;
 
 const runtimeFixture = String.raw`import assert from 'node:assert/strict';
 import { createHash, randomUUID } from 'node:crypto';
 import { createServer, request as httpRequest } from 'node:http';
 import { createRequire } from 'node:module';
-import { Readable } from 'node:stream';
 import { readFile, realpath, writeFile } from 'node:fs/promises';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
@@ -108,9 +179,10 @@ import express from 'express';
 import { z } from 'zod/v4';
 import * as sdk from '@gateivo/sdk';
 import * as connectEntry from '@gateivo/sdk/workos-connect';
-import { createWorkOSReference } from './index.mjs';
-import { createWorkOSReferenceStore } from './store.mjs';
-import { createWorkOSPostgresStore } from './postgres-store.mjs';
+import * as connectionEntry from '@gateivo/sdk/workos-connect/express';
+import * as postgresEntry from '@gateivo/sdk/workos-connect/postgres';
+import { createWorkOSConnection as createWorkOSReference } from '@gateivo/sdk/workos-connect/express';
+import { createWorkOSPostgresStore } from '@gateivo/sdk/workos-connect/postgres';
 
 const { createWorkOSConnectVerifier, createWorkOSConnectProvider } = connectEntry;
 const directory = await realpath(path.dirname(fileURLToPath(import.meta.url)));
@@ -121,6 +193,9 @@ const servers = [];
 const stores = [];
 const pools = [];
 const postgresUrl = process.env.GATEIVO_REFERENCE_TEST_DATABASE_URL;
+// SQLite belongs only to the Node 24 fictional host; the packaged connection
+// and PostgreSQL path must load on the SDK's exact minimum Node 22.6 runtime.
+const createWorkOSReferenceStore = postgresUrl ? undefined : (await import('./store.mjs')).createWorkOSReferenceStore;
 const schema = 'gateivo_ref_http_' + randomUUID().replaceAll('-', '');
 let admin;
 let ownsSchema = false;
@@ -210,19 +285,31 @@ function providerTransport() {
 }
 
 try {
-  const installed = await realpath(require.resolve('@gateivo/sdk/workos-connect'));
-  assert.ok(installed.startsWith(path.join(directory, 'node_modules/@gateivo/sdk/') ));
+  for (const subpath of ['/workos-connect', '/workos-connect/express', '/workos-connect/postgres']) {
+    const installed = await realpath(require.resolve('@gateivo/sdk' + subpath));
+    assert.ok(installed.startsWith(path.join(directory, 'node_modules/@gateivo/sdk/') ));
+  }
   assert.deepEqual(Object.keys(connectEntry).sort(), ['createWorkOSConnectProvider', 'createWorkOSConnectVerifier']);
+  assert.deepEqual(Object.keys(connectionEntry), ['createWorkOSConnection']);
+  assert.deepEqual(Object.keys(postgresEntry), ['createWorkOSPostgresStore']);
   assert.equal(sdk.createWorkOSConnectVerifier, undefined, 'Generic root must remain provider-neutral');
-  const common = require('@gateivo/sdk/workos-connect');
+  assert.equal(sdk.createWorkOSConnection, undefined, 'The composition must remain an opt-in entry');
+  assert.equal(sdk.createWorkOSPostgresStore, undefined, 'The database adapter must remain an opt-in entry');
+  const syncCommonJs = process.versions.node.split('.')[0] === '24';
+  const common = syncCommonJs ? require('@gateivo/sdk/workos-connect') : connectEntry;
+  const commonSdk = syncCommonJs ? require('@gateivo/sdk') : sdk;
   assert.deepEqual(Object.keys(common).sort(), Object.keys(connectEntry).sort());
-  for (const [factory, AccessError] of [[createWorkOSConnectProvider, sdk.AccessError], [common.createWorkOSConnectProvider, require('@gateivo/sdk').AccessError]]) {
+  if (syncCommonJs) {
+    assert.deepEqual(Object.keys(require('@gateivo/sdk/workos-connect/express')), Object.keys(connectionEntry));
+    assert.deepEqual(Object.keys(require('@gateivo/sdk/workos-connect/postgres')), Object.keys(postgresEntry));
+  }
+  for (const [factory, AccessError] of [[createWorkOSConnectProvider, sdk.AccessError], [common.createWorkOSConnectProvider, commonSdk.AccessError]]) {
     const adapter = factory({ apiKey: API_KEY, issuer: ISSUER, clientId: CLIENT, applicationId: APPLICATION,
       resource: RESOURCE, redirectUri: 'https://publisher.example.invalid/account/assistant/callback',
       accessTokenType: null, requiredScopes: ['workouts:read'] });
     assert.throws(() => adapter.authorizationUrl({ state: 'bad', codeChallenge: 'bad' }), AccessError);
   }
-  pass('Opt-in WorkOS ESM/CommonJS subpath resolves only from installed tarball and preserves shared AccessError identity');
+  pass('Opt-in provider, Express connection and PostgreSQL entries resolve only from the installed tarball; supported CommonJS imports preserve shared AccessError identity');
   phase = 'synthetic provider exchange';
   const fake = providerTransport();
   const provider = createWorkOSConnectProvider({ apiKey: API_KEY, issuer: ISSUER, clientId: CLIENT, applicationId: APPLICATION,
@@ -293,14 +380,39 @@ try {
     const headers = new Headers(init.headers ?? (input instanceof Request ? input.headers : undefined));
     const method = init.method ?? (input instanceof Request ? input.method : 'GET');
     const body = init.body ?? (input instanceof Request && !['GET', 'HEAD'].includes(method) ? Buffer.from(await input.arrayBuffer()) : undefined);
+    const callerSignal = init.signal ?? (input instanceof Request ? input.signal : undefined);
+    const signal = AbortSignal.any([AbortSignal.timeout(10_000), ...(callerSignal ? [callerSignal] : [])]);
     return new Promise((resolve, reject) => {
-      const request = httpRequest(url, { method, headers: Object.fromEntries(headers), signal: init.signal }, (response) => {
+      let settled = false;
+      const fail = (error) => { if (!settled) { settled = true; reject(error); } };
+      const request = httpRequest(url, { method, headers: Object.fromEntries(headers), signal }, (response) => {
         const responseHeaders = new Headers();
         for (let i = 0; i < response.rawHeaders.length; i += 2) responseHeaders.append(response.rawHeaders[i], response.rawHeaders[i + 1]);
         const status = response.statusCode ?? 500;
-        resolve(new Response([204, 205, 304].includes(status) ? null : Readable.toWeb(response), { status, headers: responseHeaders }));
+        // This synthetic acceptance uses finite HTTP responses (no subscriptions).
+        // Buffer under a strict budget instead of adapting IncomingMessage to a
+        // WebStream: Node 22.6 can throw asynchronously after toWeb cancellation.
+        const chunks = []; let bytes = 0;
+        response.on('data', (value) => {
+          const chunk = Buffer.isBuffer(value) ? value : Buffer.from(value);
+          bytes += chunk.byteLength;
+          if (bytes > 256 * 1024) {
+            const error = new Error('Synthetic HTTP response exceeded its bounded body budget.');
+            fail(error); response.destroy(error); request.destroy(error); return;
+          }
+          chunks.push(chunk);
+        });
+        response.once('aborted', () => fail(new Error('Synthetic HTTP response was interrupted.')));
+        response.once('error', fail);
+        response.once('end', () => {
+          if (settled) return;
+          try {
+            const result = new Response([204, 205, 304].includes(status) ? null : Buffer.concat(chunks), { status, headers: responseHeaders });
+            settled = true; resolve(result);
+          } catch (error) { fail(error); }
+        });
       });
-      request.once('error', reject);
+      request.once('error', fail);
       request.end(body instanceof URLSearchParams ? body.toString() : body);
     });
   }
@@ -589,6 +701,53 @@ try {
   assert.notEqual((await bobClient.callTool({ name: 'workouts_get', arguments: { workoutId: 'bob-1' } })).isError, true);
   pass('An uncertain provider reset fences the connection across restart without retrying a destructive provider call; other accounts stay authorized');
 
+  if (postgresUrl) {
+    phase = 'PostgreSQL two-store concurrency and restart';
+    const providerCallsBefore = providerFake.calls.length;
+    const target = { issuer: ISSUER, clientId: CLIENT, resource: RESOURCE,
+      providerSubject: 'user_referenceconcurrent12345', appSubject: 'local-concurrent-fixture',
+      scopes: ['workouts:read'], approvedExpiresAt: Date.now() + 10 * 60_000 };
+    const racePools = [new Pool(poolOptions), new Pool(poolOptions)];
+    const raceStores = racePools.map((pool) => {
+      pool.on('error', () => {}); pools.push(pool);
+      const selected = createWorkOSPostgresStore({ pool, schema }); stores.push(selected);
+      return selected;
+    });
+    await Promise.all(raceStores.map((selected) => selected.checkReady(context())));
+    const snapshots = await Promise.all(raceStores.map((selected) => selected.getState(target, context())));
+    assert.equal(snapshots[0].revision, snapshots[1].revision);
+    const contender = { ...target, sessionId: 'synthetic-concurrent-session', authVersion: '1',
+      expectedRevision: snapshots[0].revision, stateHash: createHash('sha256').update(randomUUID()).digest('hex'),
+      attemptExpiresAt: Date.now() + 120_000 };
+    const begins = await Promise.allSettled(raceStores.map((selected) => selected.begin(contender, context())));
+    assert.equal(begins.filter((result) => result.status === 'fulfilled').length, 1);
+    assert.equal(begins.filter((result) => result.status === 'rejected').length, 1);
+    const ticket = begins.find((result) => result.status === 'fulfilled').value;
+    const claims = await Promise.all(raceStores.map((selected) => selected.claimReset(ticket, context())));
+    assert.equal(claims.filter((claimed) => claimed === true).length, 1);
+    assert.equal(claims.filter((claimed) => claimed === false).length, 1);
+    await Promise.all(raceStores.map((selected) => selected.close()));
+    for (const pool of racePools) {
+      await pool.end(); pools.splice(pools.indexOf(pool), 1);
+    }
+    const reopenedPool = new Pool(poolOptions); pools.push(reopenedPool);
+    reopenedPool.on('error', () => {});
+    // Advancing only this fixture's clock also proves the durable dispatch fence
+    // cannot reopen merely because its old browser attempt has expired.
+    const reopenedNow = () => Date.now() + 6 * 60_000;
+    const reopened = createWorkOSPostgresStore({ pool: reopenedPool, schema, now: reopenedNow });
+    stores.push(reopened); await reopened.checkReady(context());
+    const fenced = await reopened.getState(target, context());
+    assert.equal(fenced.phase, 'reset_dispatched');
+    assert.ok(fenced.attemptExpiresAt < reopenedNow());
+    await assert.rejects(reopened.begin({ ...contender, expectedRevision: fenced.revision,
+      stateHash: createHash('sha256').update(randomUUID()).digest('hex'),
+      attemptExpiresAt: reopenedNow() + 60_000 }, context()), /could not be verified/);
+    assert.deepEqual(await reopened.getState(target, context()), fenced);
+    assert.equal(providerFake.calls.length, providerCallsBefore, 'Store concurrency must not call the provider');
+    pass('Two independent PostgreSQL pools/stores serialize competing begin and reset claims; a reopened store retains the dispatched fence after attempt expiry without mutating it');
+  }
+
   phase = 'private persistence';
   await store.close();
   let database;
@@ -630,9 +789,53 @@ try {
 }
 `;
 
+// Dynamic import catches module loading and top-level setup errors that occur
+// before the acceptance fixture's own try/finally. Never print child stderr,
+// error messages, import specifiers or raw assertion values.
+const bootstrapFixture = String.raw`import { readFile, writeFile } from 'node:fs/promises';
+const errorTypes = new Set(['Error', 'TypeError', 'SyntaxError', 'ReferenceError', 'RangeError',
+  'AssertionError', 'AggregateError', 'DOMException', 'DatabaseError']);
+const errorCodes = new Set(['ERR_UNKNOWN_BUILTIN_MODULE', 'ERR_MODULE_NOT_FOUND', 'ERR_REQUIRE_ESM',
+  'ERR_PACKAGE_PATH_NOT_EXPORTED', 'ERR_IMPORT_ATTRIBUTE_MISSING', 'ERR_DLOPEN_FAILED',
+  'ERR_INVALID_ARG_TYPE', 'ERR_INVALID_ARG_VALUE', 'ERR_INVALID_STATE', 'ERR_UNSUPPORTED_DIR_IMPORT',
+  'ERR_UNSUPPORTED_ESM_URL_SCHEME', 'ERR_VM_DYNAMIC_IMPORT_CALLBACK_MISSING', 'ERR_ASSERTION',
+  'ENOENT', 'EACCES', 'EINVAL', 'ECONNREFUSED', 'ETIMEDOUT', 'ENOTFOUND',
+  '42P01', '3F000', '42601', '42703', '23505', '23503', '25006', '42501', '57014', '57P01']);
+const recordFailure = async (error, fallbackPhase) => {
+  const previous = await readFile('./consumer-result.json', 'utf8').then(JSON.parse).catch(() => null);
+  // A cleanup failure must not replace an earlier, more specific failed phase.
+  if (previous?.status !== 'failed') {
+    const constructorName = error?.constructor?.name;
+    const errorCode = errorCodes.has(error?.code) ? error.code : undefined;
+    const line = Number(error?.stack?.match(/verify-runtime\.mjs:(\d+):/)?.[1]) || undefined;
+    await writeFile('./consumer-result.json', JSON.stringify({ status: 'failed',
+      phase: previous?.status === 'passed' ? 'fixture cleanup' : fallbackPhase,
+      errorType: errorTypes.has(constructorName) ? constructorName : 'Error',
+      ...(errorCode === undefined ? {} : { errorCode }),
+      ...(Number.isSafeInteger(line) && line > 0 && line <= 100000 ? { line } : {}),
+      checks: Array.isArray(previous?.checks) ? previous.checks : [],
+    }, null, 2));
+  }
+  process.exitCode = 1;
+};
+// HTTP/driver EventEmitter errors and unhandled promises are outside the
+// dynamic-import rejection boundary. These synthetic-only process handlers
+// preserve a diagnostic before exiting, never continue acceptance after a fault.
+const fatal = (error) => { void recordFailure(error, 'asynchronous runtime').finally(() => process.exit(1)); };
+process.once('uncaughtException', fatal);
+process.once('unhandledRejection', fatal);
+await writeFile('./consumer-result.json', JSON.stringify({ status: 'running', phase: 'module bootstrap', checks: [] }));
+try {
+  await import('./verify-runtime.mjs');
+} catch (error) {
+  await recordFailure(error, 'module bootstrap');
+}
+`;
+
 let temporary;
 try {
-  assert.equal(process.versions.node.split('.')[0], '24', 'Reference verification requires Node 24');
+  assert.ok(postgres ? (nodeMajor === 24 || (nodeMajor === 22 && nodeMinor >= 6)) : nodeMajor === 24,
+    'SQLite reference verification requires Node 24; PostgreSQL supports Node 22.6 within 22.x or Node 24.');
   await mkdir(path.dirname(reportPath), { recursive: true });
   await writeFile(reportPath, JSON.stringify(report, null, 2) + '\n');
   const [manifest, rootManifest] = await Promise.all([
@@ -656,15 +859,17 @@ try {
   assert.equal(pack.name, manifest.name);
   assert.equal(pack.version, manifest.version);
   for (const file of pack.files) {
-    assert.ok(['package.json', 'README.md', 'LICENSE', 'SECURITY.md', 'docs/authentication.md'].includes(file.path) || /^dist\/[A-Za-z0-9_-]+(?:\.d\.(?:ts|cts)|\.(?:js|cjs))$/.test(file.path));
+    assert.ok(['package.json', 'README.md', 'LICENSE', 'SECURITY.md', 'docs/authentication.md', 'docs/workos-connection.md', 'docs/workos-reference.md'].includes(file.path) || /^dist\/[A-Za-z0-9_-]+(?:\.d\.(?:ts|cts)|\.(?:js|cjs))$/.test(file.path));
     assert.doesNotMatch(file.path, /sagly|pilot|\.env|secret|service/i);
   }
-  for (const extension of ['js', 'cjs', 'd.ts', 'd.cts']) assert.ok(pack.files.some((file) => file.path === `dist/workos-connect.${extension}`));
-  for (const required of ['LICENSE', 'README.md', 'SECURITY.md', 'docs/authentication.md']) {
+  for (const entry of ['workos-connect', 'workos-connect-express', 'workos-connect-postgres']) {
+    for (const extension of ['js', 'cjs', 'd.ts', 'd.cts']) assert.ok(pack.files.some((file) => file.path === `dist/${entry}.${extension}`));
+  }
+  for (const required of ['LICENSE', 'README.md', 'SECURITY.md', 'docs/authentication.md', 'docs/workos-connection.md']) {
     assert.ok(pack.files.some((file) => file.path === required), 'Required public documentation or licence is missing');
   }
   report.package = { name: pack.name, version: pack.version, integrity: pack.integrity, fileCount: pack.files.length };
-  checks.push('Actual SDK tarball exposes optional WorkOS entry point without application-specific, PostgreSQL or provider SDK dependencies');
+  checks.push('Actual SDK tarball exposes optional provider, connection and PostgreSQL adapter entries without application-specific, database-driver or provider-SDK dependencies');
   const consumer = path.join(temporary, 'consumer');
   await mkdir(consumer);
   // Copy only source modules. Never copy an example user's
@@ -695,24 +900,36 @@ try {
   consumerManifest.devDependencies = { ...consumerManifest.devDependencies,
     '@modelcontextprotocol/client': rootManifest.devDependencies['@modelcontextprotocol/client'],
     '@types/node': rootManifest.devDependencies['@types/node'], typescript: rootManifest.devDependencies.typescript };
+  if (postgres) consumerManifest.devDependencies['@types/pg'] = '8.23.1';
   await writeFile(path.join(consumer, 'package.json'), JSON.stringify(consumerManifest, null, 2) + '\n');
   await npm(['install', '--ignore-scripts', '--no-audit', '--no-fund'], consumer, 'Installing isolated reference');
   assert.ok(inside(consumer, await realpath(path.join(consumer, 'node_modules/@gateivo/sdk'))));
   const lock = JSON.parse(await readFile(path.join(consumer, 'package-lock.json'), 'utf8'));
   assert.ok(!Object.keys(lock.packages).some((name) => /(?:^|\/)node_modules\/@workos-inc\/node$/.test(name)));
   assert.equal(Object.hasOwn(lock.packages, 'node_modules/pg'), postgres, 'PostgreSQL remains an optional host dependency');
+  for (const file of pack.files.filter((file) => /^dist\/.*\.(?:js|cjs)$/.test(file.path))) {
+    const code = await readFile(path.join(consumer, 'node_modules/@gateivo/sdk', file.path), 'utf8');
+    assert.doesNotMatch(code, /(?:from\s*|import\s*\(|require\s*\()\s*['"](?:node:sqlite|pg)['"]/, 'Connection runtime must not import a host database driver or fictional SQLite store');
+  }
   report.isolatedInstallation = true;
   checks.push('Reference installs the npm tarball in an independent temporary project with no checkout module resolution');
-  await Promise.all(['mts', 'cts'].map((extension) => writeFile(path.join(consumer, `consumer-types.${extension}`), typesFixture)));
+  const realPostgresTypes = postgres ? "\nimport { Pool } from 'pg';\ndeclare const realPool: Pool;\ncreateWorkOSPostgresStore({ pool: realPool, schema: 'gateivo_consumer' });\n" : '';
+  await Promise.all(['mts', 'cts'].map((extension) => writeFile(path.join(consumer, `consumer-types.${extension}`), typesFixture + realPostgresTypes)));
   await run(process.execPath, ['node_modules/typescript/bin/tsc', '--noEmit', '--strict', '--module', 'NodeNext',
     '--moduleResolution', 'NodeNext', '--target', 'ES2022', '--types', 'node', '--esModuleInterop',
     'consumer-types.mts', 'consumer-types.cts'], consumer, 'Strict WorkOS ESM/CommonJS declarations');
-  checks.push('Strict NodeNext declarations retain verified identity immutability, resolver typing and required provider scope configuration');
+  checks.push('Strict NodeNext declarations retain immutable identities and typed app-session, account-binding, cancellation and complete lifecycle-store contracts');
   await writeFile(path.join(consumer, 'verify-runtime.mjs'), runtimeFixture);
-  try { await run(process.execPath, ['verify-runtime.mjs'], consumer, 'Reference acceptance'); }
+  await writeFile(path.join(consumer, 'verify-bootstrap.mjs'), bootstrapFixture);
+  try { await run(process.execPath, ['verify-bootstrap.mjs'], consumer, 'Reference acceptance'); }
   catch (error) {
     const result = await readFile(path.join(consumer, 'consumer-result.json'), 'utf8').then(JSON.parse).catch(() => null);
-    if (result?.status === 'failed') throw new Error(`Reference acceptance failed during ${result.phase} (${result.errorType}, fixture line ${result.line ?? 'unknown'}${result.actualNumber !== undefined ? `, actual ${result.actualNumber}, expected ${result.expectedNumber}` : ''}).`);
+    if (result?.status === 'failed') {
+      const safeCode = typeof result.errorCode === 'string' && /^(?:ERR_[A-Z_]{1,64}|ENOENT|EACCES|EINVAL|ECONNREFUSED|ETIMEDOUT|ENOTFOUND|42P01|3F000|42601|42703|23505|23503|25006|42501|57014|57P01)$/.test(result.errorCode)
+        ? ', code ' + result.errorCode : '';
+      throw new Error(`Reference acceptance failed during ${result.phase} (${result.errorType}${safeCode}, fixture line ${result.line ?? 'unknown'}${result.actualNumber !== undefined ? `, actual ${result.actualNumber}, expected ${result.expectedNumber}` : ''}).`);
+    }
+    if (result?.status === 'running') throw new Error('Reference acceptance exited during module bootstrap before a sanitized failure report was completed.');
     throw error;
   }
   const result = JSON.parse(await readFile(path.join(consumer, 'consumer-result.json'), 'utf8'));

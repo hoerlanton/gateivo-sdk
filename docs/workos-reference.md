@@ -2,7 +2,7 @@
 
 The optional WorkOS reference connects the SDK to an existing application login. Its runnable fictional host demonstrates that composition; your application can replace the host with its existing session and account services.
 
-The reference is source code in `examples/workos-reference/`, separate from the SDK runtime archive. Start with the [runnable app guide](../examples/workos-reference/README.md). It requires Node.js 24 for its private SQLite store. The generic SDK continues to support Node.js 22.6 within 22.x and Node.js 24.
+The fictional host and SQLite example are source code in `examples/workos-reference/`, separate from the SDK runtime archive. Start with the [runnable app guide](../examples/workos-reference/README.md). It requires Node.js 24 for its private SQLite store. The optional packaged connection/PostgreSQL path supports Node.js 22.6 within 22.x and Node.js 24; see the [existing-app guide](workos-connection.md). Those packaged composition imports are unreleased and are not included in the published preview.5 archive.
 
 ## The identity boundary
 
@@ -13,9 +13,9 @@ The fictional host uses administrator-configured native WorkOS user IDs for Alic
 For a publisher integration, keep your existing login and provide two hooks:
 
 ```js
-import { createWorkOSReference } from './workos-reference/index.mjs';
+import { createWorkOSConnection } from '@gateivo/sdk/workos-connect/express';
 
-const assistant = createWorkOSReference({
+const assistant = createWorkOSConnection({
   appId: 'your-app',
   publicUrl: settings.publicUrl,
   issuer: settings.workosIssuer,
@@ -67,7 +67,7 @@ If your app already owns its MCP router, use `mountMcp: false` and omit `actions
 
 For one host, `createWorkOSReferenceStore({ path })` from `store.mjs` opens an absolute, private SQLite file. Preserve this file and its revocation history on a persistent private disk. SQLite is unsuitable for an ephemeral application filesystem or multiple app hosts.
 
-For multiple processes or hosts, `createWorkOSPostgresStore({ pool, schema })` in `postgres-store.mjs` accepts an application-owned `pg` pool. Install and configure that dependency in your application; it is not a runtime SDK dependency. Use verified TLS, bounded pool/checkout limits and a dedicated schema. Run `migrate()` explicitly in the deployment process, then `checkReady()` before accepting traffic. Store close does not close the pool. PostgreSQL tests require a separately supplied local test database; the default public checks use SQLite.
+For multiple processes or hosts, `createWorkOSPostgresStore({ pool, schema })` from `@gateivo/sdk/workos-connect/postgres` accepts an application-owned `pg` pool. The example's `postgres-store.mjs` remains a compatibility reexport. Install and configure `pg` in your application; it is not a runtime SDK dependency. Use verified TLS, bounded pool/checkout limits and a dedicated schema. Run `migrate()` explicitly in the deployment process, then `checkReady()` before accepting traffic. Store close does not close the pool. PostgreSQL tests require a separately supplied local test database; the default public reference checks use SQLite.
 
 Disconnect revokes the local grant. Reconnect creates a new consent generation and retains the old generation's rejection record. A provider reset applies to the entire user/client authorization, so dedicate the client to this reference and serialize its resets through the same durable store. Uncertain provider deletion or token exchange remains blocked across restart. There is no automatic unlock or reset-by-deleting-the-database workflow.
 

@@ -4,6 +4,8 @@ Expose selected backend functions as scoped tools for AI assistants. Keep your e
 
 **Experimental developer preview · Node.js / Express 4 · Read-only action interfaces**
 
+This development branch adds optional packaged WorkOS connection and PostgreSQL adapters for the next preview. They are not in the published `0.1.0-preview.5` archive. See the [existing-app connection guide](docs/workos-connection.md) for the new integration path.
+
 [Gateivo website](https://gateivo.com) · [Authentication and responsibilities](docs/authentication.md) · [Report an integration issue](https://github.com/hoerlanton/gateivo-sdk/issues) · [Contact](mailto:anton@gateivo.com)
 
 Gateivo runs in your backend. Your React Native, Flutter or native mobile interface can stay as it is. Claude has been tested with the separate SAGLY staging integration using fictional accounts. This repository's quickstart is a local MCP example, with simulated authorization.
@@ -26,9 +28,9 @@ Read the [workouts example](https://github.com/hoerlanton/gateivo-sdk/tree/main/
 
 ## Try an account-linked reference app
 
-The [WorkOS reference app](https://github.com/hoerlanton/gateivo-sdk/tree/main/examples/workos-reference) adds a fictional application login, explicitly configured account mappings, consent pages and durable disconnect/reconnect state. It requires **Node.js 24** and a separately configured WorkOS development environment. Follow its README to generate private local settings and run it behind an HTTPS reverse proxy.
+The [WorkOS reference app](examples/workos-reference) adds a fictional application login and explicitly configured account mappings around the optional connection module. This fictional host requires **Node.js 24** for its private SQLite store and a separately configured WorkOS development environment. Follow its README to generate private local settings and run it behind an HTTPS reverse proxy.
 
-To integrate with your own existing login, use the two trusted hooks in the [reference integration guide](https://github.com/hoerlanton/gateivo-sdk/blob/main/docs/workos-reference.md): authenticate the app session, then resolve the account's verified provider binding. The example's password login is only for its fictional accounts.
+To integrate with your own existing login, use the [packaged connection module](docs/workos-connection.md): authenticate the app session, then resolve the account's verified provider binding. An optional PostgreSQL adapter uses your app's existing pool. This path supports Node.js 22.6 within 22.x and Node.js 24 without SQLite. The example's password login is only for its fictional accounts.
 
 ```sh
 # From a built checkout, using Node.js 24:
@@ -36,7 +38,7 @@ npm run test:workos
 npm run verify:workos
 ```
 
-These checks use signed synthetic provider responses and an independently installed SDK archive. They verify the local implementation; a fresh hosted WorkOS/Claude connection needs its own acceptance test. Reference source and tests live in this repository and are separate from the SDK runtime archive.
+These checks use signed synthetic provider responses and an independently installed SDK archive. They verify the local implementation; a fresh hosted WorkOS/Claude connection needs its own acceptance test. The connection module and PostgreSQL adapter enter the runtime archive; the fictional password host, setup generator and SQLite example stay in this repository.
 
 ## Define an action using your existing services
 
@@ -94,8 +96,10 @@ This is an integration outline. Your application supplies the named services and
 | Gateivo SDK | Your application |
 | --- | --- |
 | Typed action definitions and strict input/output validation | Existing service functions, ownership and business rules |
-| App, scope and principal-expiry checks | Verification of delegated identity, audience, current consent and revocation |
-| MCP Streamable HTTP transport and protected-resource metadata helpers | Authorization server, account linking, consent UI and durable grant state |
+| App, scope and principal-expiry checks; optional token verifiers | Existing account identity, current entitlements and owner-scoped reads |
+| MCP Streamable HTTP transport and protected-resource metadata helpers | Authorization server configuration, HTTPS deployment and verified account linking |
+| Optional WorkOS approval/callback/disconnect/reconnect composition | Existing session authentication and trusted provider-account bindings |
+| Optional PostgreSQL approval store using your pool | Database hosting, TLS, explicit migrations and preservation of revocation history |
 | Request/body limits, timeouts and process-local concurrency bounds | HTTPS hosting, shared quotas and bounded service/database operations |
 | Optional best-effort audit hook with outcomes, error codes and timing | Log storage, monitoring, alerts and retention |
 
@@ -114,9 +118,11 @@ The current action API is read-only in intent. Your handlers are ordinary applic
 
 The root export is provider-neutral. Focused imports are available from `@gateivo/sdk/core`, `/express` and `/oauth`. The optional `/workos-connect` entry supplies a WorkOS HTTP provider and verifier; it still requires your identity mapping, durable consent state and deployment-specific lifecycle checks.
 
+The unreleased optional `@gateivo/sdk/workos-connect/express` entry adds `createWorkOSConnection`, which composes approval pages, callbacks, exact consent checks and MCP routing around your existing login. `@gateivo/sdk/workos-connect/postgres` supplies `createWorkOSPostgresStore` with an application-owned pool. Neither entry adds WorkOS, database or hosting accounts automatically. See the [integration guide](docs/workos-connection.md).
+
 ### CommonJS on Node.js 22
 
-Use `await import('@gateivo/sdk')` during startup, before accepting requests. The root, OAuth and WorkOS entries depend on ESM-only `jose`, so synchronous `require()` of those entries is not supported on Node.js 22.6. Focused `/core` and `/express` entries support synchronous `require()`. Keep one integration on the same import graph so `AccessError` identity stays consistent.
+Use `await import('@gateivo/sdk')` during startup, before accepting requests. The root, OAuth and WorkOS connection entries depend on ESM-only `jose`, so synchronous `require()` of those entries is not supported on Node.js 22.6. Focused `/core` and `/express` entries support synchronous `require()`. Keep one integration on the same import graph so `AccessError` identity stays consistent.
 
 ## Installing in another backend
 
@@ -140,7 +146,7 @@ Preview archives and checksums appear on the [GitHub Releases page](https://gith
 
 ## Current scope
 
-- Experimental APIs in `0.1.0-preview.5`; changes may be required between previews.
+- Published archive: `0.1.0-preview.5`. This branch prepares `0.1.0-preview.6`; changes may be required between previews.
 - Node.js/Express backend integration. There is no frontend or React Native SDK.
 - Claude is the tested remote assistant in the separate staging pilot. Other assistants require their own validation.
 - No hosted Gateivo account/consent portal, durable log service, billing, automatic subscription enforcement or write-transaction workflow is included.

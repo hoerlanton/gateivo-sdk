@@ -36,9 +36,11 @@ The adapter supports the inspected signed user-access-token profile and requires
 
 Provider management resets and consent generations are separate from token signature verification. Persist reset/replacement state, serialize changes and retain revoked generation bindings. Before rollout, verify that disconnect and reconnect keep both old access credentials and old refresh credentials blocked for your exact provider configuration.
 
-The public local example does not configure a real provider. It deliberately uses a loopback-only simulator with temporary in-memory approvals. There is no hosted login, grant database or consent UI in this package.
+The public local workouts example does not configure a real provider. It deliberately uses a loopback-only simulator with temporary in-memory approvals. The core entries do not operate a hosted login, consent service or database.
 
-For a complete reference composition, see the separate [WorkOS reference source and integration guide](https://github.com/hoerlanton/gateivo-sdk/blob/main/docs/workos-reference.md). Its fictional host supplies login and private SQLite persistence on Node.js 24; publishers can instead connect the same module to their existing authenticated sessions and verified account mappings. Reference source is separate from the runtime archive. The SDK does not provision the provider application, link customer accounts automatically or operate a hosted consent service.
+For an existing application, the unreleased optional [`@gateivo/sdk/workos-connect/express` composition](workos-connection.md) supplies approval pages, callback handling and disconnect/reconnect around trusted application hooks. The optional PostgreSQL store uses the application's pool and persistent schema. Developers still configure the provider, authenticate existing sessions and supply verified account bindings. These additions are not in the published preview.5 archive.
+
+The separate [fictional WorkOS host](https://github.com/hoerlanton/gateivo-sdk/blob/main/docs/workos-reference.md) supplies example login and private SQLite persistence on Node.js 24. That password host and setup generator remain source examples, outside the runtime archive. The SDK does not provision the provider application, link customer accounts automatically or operate a hosted consent service.
 
 ## Operations
 
