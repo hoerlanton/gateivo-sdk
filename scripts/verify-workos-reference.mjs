@@ -425,9 +425,12 @@ try {
     Pool = (await import('pg')).default.Pool;
     admin = new Pool(poolOptions);
     admin.on('error', () => {});
-    const actual = (await admin.query('SELECT current_database() AS database, host(inet_server_addr()) AS address')).rows[0];
+    // The parent pins the client destination to a loopback URL. PostgreSQL's
+    // own interface can be a Docker bridge address behind that published port;
+    // it does not identify the client destination. Keep the exact test database
+    // and newly owned random-schema guards before any write.
+    const actual = (await admin.query('SELECT current_database() AS database')).rows[0];
     assert.equal(actual.database, 'gateivo_reference_test');
-    assert.ok(['127.0.0.1', '::1'].includes(actual.address));
     assert.equal((await admin.query('SELECT to_regnamespace($1) AS namespace', [schema])).rows[0].namespace, null);
     ownsSchema = true;
   }
