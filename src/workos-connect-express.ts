@@ -3,7 +3,7 @@ import type { createActionRegistry } from './core.js';
 import type { TokenVerifierContext } from './http.js';
 import type { ActiveOAuthGrant } from './oauth-jwt.js';
 import type { OAuthResource } from './oauth-resource.js';
-import type { AppAction, AuditEvent, Principal } from './types.js';
+import type { AppAction, AuditEvent, ErrorCode, Principal } from './types.js';
 import type { VerifiedWorkOSConnectIdentity, WorkOSConnectTokenSubjectResolver } from './workos-connect.js';
 import type { WorkOSConnectProvider } from './workos-connect-provider.js';
 import { createWorkOSConnectionRuntime } from './workos-connect-express-runtime.mjs';
@@ -137,7 +137,18 @@ export interface WorkOSConnection {
   readonly provider: WorkOSConnectProvider;
 }
 
-export interface WorkOSConnectionDependencies { fetch?: typeof fetch }
+/** Fixed callback failure categories; deliberately excludes identity, tokens and errors. */
+export interface WorkOSConsentDiagnostic {
+  readonly operation: 'consent_callback';
+  readonly phase: 'token_exchange' | 'authority_recheck' | 'store_complete';
+  readonly reason: ErrorCode | 'internal_error';
+}
+
+export interface WorkOSConnectionDependencies {
+  fetch?: typeof fetch;
+  /** Best-effort observer. Throws/rejections do not change the authentication outcome. */
+  onConsentDiagnostic?: (event: WorkOSConsentDiagnostic) => void | Promise<void>;
+}
 
 /** Optional Express composition; the application supplies its existing login, binding and store. */
 export function createWorkOSConnection(options: WorkOSConnectionOptions,

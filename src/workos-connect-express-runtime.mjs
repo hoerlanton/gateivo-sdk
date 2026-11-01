@@ -7,6 +7,8 @@ import { AccessError, createActionRegistry, createAgentRouter, createOAuthResour
 import { createWorkOSConnectProvider, createWorkOSConnectVerifier } from './workos-connect.js';
 
 const ATTEMPT_MS = 5 * 60_000;
+const CONSENT_REASONS = new Set(['UNAUTHENTICATED', 'FORBIDDEN', 'INVALID_ARGUMENT',
+  'NOT_FOUND', 'UNAVAILABLE', 'TIMEOUT', 'OUTPUT_LIMIT']);
 const opaque = (value, max = 512) => typeof value === 'string' && value.length > 0
   && value.length <= max && /^[\x21-\x7e]+$/.test(value);
 const hash = (value) => createHash('sha256').update(value).digest('hex');
@@ -39,12 +41,14 @@ export function createWorkOSConnectionRuntime(options, dependencies = {}) {
   const approvalLifetimeMs = options.approvalLifetimeMs ?? 24 * 60 * 60_000;
   const mountMcp = options.mountMcp === undefined ? true : options.mountMcp;
   const accessExpiresAt = options.accessExpiresAt ?? Infinity;
+  const onConsentDiagnostic = dependencies.onConsentDiagnostic;
   if (origin.protocol !== 'https:' || origin.origin !== publicUrl || origin.username || origin.password
     || !opaque(appId) || !Number.isSafeInteger(approvalLifetimeMs) || approvalLifetimeMs < 60_000
     || approvalLifetimeMs > 7 * 24 * 60 * 60_000 || !(options.secret instanceof Uint8Array)
     || options.secret.length !== 32 || typeof authenticateSession !== 'function'
     || typeof resolveAccount !== 'function' || typeof mountMcp !== 'boolean'
     || (resolveTokenSubject !== undefined && typeof resolveTokenSubject !== 'function')
+    || (onConsentDiagnostic !== undefined && typeof onConsentDiagnostic !== 'function')
     || (options.accessExpiresAt !== undefined && (!Number.isSafeInteger(accessExpiresAt)
       || accessExpiresAt < 0 || accessExpiresAt > 8_640_000_000_000_000))
     || (mountMcp && (!Array.isArray(options.actions) || !options.actions.length))) {
@@ -175,6 +179,16 @@ export function createWorkOSConnectionRuntime(options, dependencies = {}) {
   };
   const fail = async (ticket) => {
     try { await store.fail(ticket, { signal: AbortSignal.timeout(2500) }); } catch { /* durable phase stays fenced */ }
+  };
+  // Only fixed, server-owned categories reach the optional observer. Its errors
+  // and rejected promises cannot change callback failure or durable fencing.
+  const consentDiagnostic = (phase, cause) => {
+    if (!onConsentDiagnostic) return;
+    try {
+      const code = cause instanceof AccessError ? Object.getOwnPropertyDescriptor(cause, 'code')?.value : undefined;
+      Promise.resolve(onConsentDiagnostic(Object.freeze({ operation: 'consent_callback', phase,
+        reason: CONSENT_REASONS.has(code) ? code : 'internal_error' }))).catch(() => {});
+    } catch {}
   };
   const query = (req) => new URL(req.originalUrl, publicUrl).searchParams;
   controls.use((req, res, next) => {
@@ -324,15 +338,18 @@ export function createWorkOSConnectionRuntime(options, dependencies = {}) {
     const ticket = await store.consume(callbackIdentity, context);
     if (!ticket) { failPage(res, 400); return; }
     res.clearCookie(cookieName, cookieOptions);
+    let phase = 'token_exchange';
     try {
       requireBeforeCutoff();
       const identity = await provider.exchangeCode({ code, codeVerifier: attempt.verifier,
         expectedUserId: account.providerSubject }, context);
+      phase = 'authority_recheck';
       await requireCurrentAuthority(req, session, account, context);
+      phase = 'store_complete';
       await store.complete(ticket, identity, context);
       requireBeforeCutoff();
       context.signal.throwIfAborted(); res.redirect(303, base);
-    } catch (cause) { await fail(ticket); throw cause; }
+    } catch (cause) { await fail(ticket); consentDiagnostic(phase, cause); throw cause; }
   }));
   controls.use((_req, res) => failPage(res, 404));
   controls.use((_error, _req, res, _next) => {

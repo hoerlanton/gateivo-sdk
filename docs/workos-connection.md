@@ -117,6 +117,8 @@ Mount at the app root, after any existing verified session middleware and before
 
 Keep browser-login redirects limited to the account pages: `/agent/mcp` authenticates the assistant's bearer token, and protected-resource metadata is public. Do not put either behind middleware that requires a browser session. Your application directs signed-out users to its existing login; the connection module returns 401 when its browser session hook cannot authenticate the request.
 
+For callback troubleshooting, the optional second argument accepts `onConsentDiagnostic(event)`. It reports only the fixed operation, failure phase and sanitized reason; it excludes tokens, identities and provider/error details. The payload is read-only, and observer failures do not change the callback response or durable fencing. Your application supplies the logging sink; this is separate from the action audit hook and is not a hosted log service.
+
 The connection module rechecks the exact approved account and grant before and after each action. Your service still enforces ownership, subscription entitlements and business rules, honors cancellation, and bounds database work. Neither tool annotations nor timeouts prevent a handler from writing data or continuing work if it ignores cancellation.
 
 ## Approval and reconnect
