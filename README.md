@@ -24,6 +24,20 @@ The demo starts a temporary loopback server and uses the official MCP client to 
 
 Read the [workouts example](https://github.com/hoerlanton/gateivo-sdk/tree/main/examples/workouts) to see how existing owner-scoped service functions become tools. Its in-memory approvals are a local simulation; connecting Claude remotely requires real delegated authorization and HTTPS.
 
+## Try an account-linked reference app
+
+The [WorkOS reference app](https://github.com/hoerlanton/gateivo-sdk/tree/main/examples/workos-reference) adds a fictional application login, explicitly configured account mappings, consent pages and durable disconnect/reconnect state. It requires **Node.js 24** and a separately configured WorkOS development environment. Follow its README to generate private local settings and run it behind an HTTPS reverse proxy.
+
+To integrate with your own existing login, use the two trusted hooks in the [reference integration guide](https://github.com/hoerlanton/gateivo-sdk/blob/main/docs/workos-reference.md): authenticate the app session, then resolve the account's verified provider binding. The example's password login is only for its fictional accounts.
+
+```sh
+# From a built checkout, using Node.js 24:
+npm run test:workos
+npm run verify:workos
+```
+
+These checks use signed synthetic provider responses and an independently installed SDK archive. They verify the local implementation; a fresh hosted WorkOS/Claude connection needs its own acceptance test. Reference source and tests live in this repository and are separate from the SDK runtime archive.
+
 ## Define an action using your existing services
 
 ```js

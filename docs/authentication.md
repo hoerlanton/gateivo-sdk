@@ -38,6 +38,8 @@ Provider management resets and consent generations are separate from token signa
 
 The public local example does not configure a real provider. It deliberately uses a loopback-only simulator with temporary in-memory approvals. There is no hosted login, grant database or consent UI in this package.
 
+For a complete reference composition, see the separate [WorkOS reference source and integration guide](https://github.com/hoerlanton/gateivo-sdk/blob/main/docs/workos-reference.md). Its fictional host supplies login and private SQLite persistence on Node.js 24; publishers can instead connect the same module to their existing authenticated sessions and verified account mappings. Reference source is separate from the runtime archive. The SDK does not provision the provider application, link customer accounts automatically or operate a hosted consent service.
+
 ## Operations
 
 - Keep credentials server-side and outside source control, public issues and logs.

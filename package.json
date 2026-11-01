@@ -98,7 +98,11 @@
     "demo:server": "node examples/workouts/server.mjs --demo",
     "demo:client": "node examples/workouts/client.mjs",
     "verify:consumer": "node scripts/verify-consumer.mjs",
-    "verify:release": "node scripts/verify-release.mjs"
+    "verify:release": "node scripts/verify-release.mjs",
+    "test:workos": "node --import tsx --test tests/workos-reference*.test.*",
+    "verify:workos": "node scripts/verify-workos-reference.mjs",
+    "reference:setup": "node examples/workos-reference/setup.mjs",
+    "reference:start": "node examples/workos-reference/host.mjs"
   },
   "devDependencies": {
     "@modelcontextprotocol/client": "2.4.0",

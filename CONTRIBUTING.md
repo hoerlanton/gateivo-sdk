@@ -12,6 +12,8 @@ npm run demo
 
 `check` includes the packaged clean-consumer verification. Run `npm run verify:consumer` separately when only the packaging boundary needs checking.
 
+The authenticated WorkOS example requires Node.js 24. After building, run `npm run test:workos` and `npm run verify:workos` for its focused tests and isolated signed-provider acceptance. These are separate CI steps on Node.js 24; the generic SDK retains Node.js 22.6 support. They do not use a live WorkOS account or log in to Claude.
+
 Changes to exported behavior should include a relevant test. Keep application-specific adapters, deployment credentials and customer data out of this repository. Use fictional accounts and records in reproductions.
 
 For a proposed feature, describe the app workflow, what you tried and the missing capability. Please open an issue before a substantial API redesign so we can discuss compatibility and scope.

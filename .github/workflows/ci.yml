@@ -30,3 +30,9 @@ jobs:
       - run: npm ci
       - run: npm run check
       - run: npm run demo
+      - name: Check authenticated reference (Node 24)
+        if: matrix.node == '24.x'
+        run: npm run test:workos
+      - name: Verify isolated authenticated reference (Node 24)
+        if: matrix.node == '24.x'
+        run: npm run verify:workos
