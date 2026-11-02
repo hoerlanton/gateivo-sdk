@@ -44,6 +44,10 @@ jobs:
       - run: npm ci
       - run: npm run check
       - run: npm run demo
+      - name: Check the existing HTTP-backend example
+        run: node --test examples/http-backend/*.test.mjs
+      - name: Exercise the fictional HTTP boundary over MCP
+        run: node examples/http-backend/demo.mjs
       - name: Check authenticated reference (Node 24)
         if: matrix.node == '24.x'
         run: npm run test:workos

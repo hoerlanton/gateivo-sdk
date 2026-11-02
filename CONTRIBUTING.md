@@ -18,6 +18,12 @@ The packaged Express connection and PostgreSQL store also support Node.js 22.6. 
 
 Changes to exported behavior should include a relevant test. Keep application-specific adapters, deployment credentials and customer data out of this repository. Use fictional accounts and records in reproductions.
 
+The source-only HTTP-backend example has its own boundary tests and local MCP
+exercise. After building, run `node --test examples/http-backend/*.test.mjs` and
+`node examples/http-backend/demo.mjs` on both supported runtimes. Its upstream
+server and approvals are fictional; these checks do not establish Laravel or
+hosted OAuth compatibility. No PHP runtime or external API is contacted.
+
 For a proposed feature, describe the app workflow, what you tried and the missing capability. Please open an issue before a substantial API redesign so we can discuss compatibility and scope.
 
 Report security vulnerabilities through [SECURITY.md](SECURITY.md).
