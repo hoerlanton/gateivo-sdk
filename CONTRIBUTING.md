@@ -24,6 +24,13 @@ exercise. After building, run `node --test examples/http-backend/*.test.mjs` and
 server and approvals are fictional; these checks do not establish Laravel or
 hosted OAuth compatibility. No PHP runtime or external API is contacted.
 
+On Node.js 24, `node examples/http-backend/login-demo.mjs` joins the existing
+password/session reference, signed synthetic provider and HTTP example. Its
+focused `tests/workos-reference-http.test.mjs` also runs under `test:workos`.
+The checks exercise real session, PKCE, token/grant and credential-binding code
+with fictional accounts; a real Laravel login or hosted provider still needs
+its own acceptance test.
+
 For a proposed feature, describe the app workflow, what you tried and the missing capability. Please open an issue before a substantial API redesign so we can discuss compatibility and scope.
 
 Report security vulnerabilities through [SECURITY.md](SECURITY.md).

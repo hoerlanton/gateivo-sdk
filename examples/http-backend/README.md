@@ -1,10 +1,68 @@
 # Call an existing HTTP backend from Gateivo
 
-**Source example · fictional local API · Node.js 22.6 within 22.x or Node.js 24.**
+**Source examples · Node.js 24 for the full login flow · Node.js 22.6/24 for the HTTP-only flow.**
 This demonstrates a Gateivo action calling an authenticated, owner-scoped HTTP
-API. It is not a Laravel connector, a PHP SDK, a hosted service or a real OAuth
-login. The test API is implemented in JavaScript; no PHP or Laravel runtime is
-executed by this example.
+API. The combined login example below connects the existing app-login reference
+to that same HTTP boundary. The test API is implemented in JavaScript; no PHP or
+Laravel runtime is executed by these examples.
+
+## Start with the verified-login example
+
+Use **Node.js 24** for this example; its reference host uses SQLite. From a fresh
+checkout of this development branch:
+
+```sh
+git clone --branch feat/authenticated-reference https://github.com/hoerlanton/gateivo-sdk.git
+cd gateivo-sdk
+npm ci
+npm run build
+node examples/http-backend/login-demo.mjs
+```
+
+The command exercises the full chain with temporary local fixtures:
+
+`Password login → verified app session → account/provider binding → consent and PKCE callback → verified assistant token → account-bound credential lookup → HTTP read`
+
+Password verification, opaque session checks, the SDK's connection flow, signed
+token verification, durable grant checks and the actual MCP/HTTP requests run
+through their implementations. The identity provider is a signed synthetic
+fixture, and the upstream API is a fictional JavaScript server. Local browser
+requests simulate the configured same-machine HTTPS proxy; the command does not
+contact WorkOS, Claude or Laravel. Passwords, assistant tokens and upstream API
+credentials stay in memory. Private temporary configuration and SQLite state
+are removed, and the servers close when the exercise ends.
+
+**Review [`authenticated.mjs`](authenticated.mjs) first.** It connects the trusted
+application-account resolver to `resolveBackendCredential`, then to the existing
+HTTP client's `resolveCredential`. [`login-exercise.mjs`](login-exercise.mjs)
+shows the password, session, consent and MCP requests that reach it. The source
+login remains the [existing reference host](../workos-reference/host.mjs).
+
+The credential lookup receives a current account snapshot:
+
+```js
+{ appId, subject, issuer, providerSubject, authVersion }
+```
+
+The publisher-owned lookup returns those same binding fields plus `credential`
+and `expiresAt` (Unix milliseconds). The adapter checks the exact binding, account
+state, grant and credential expiry around lookup and after the upstream read.
+It returns only the credential to the HTTP client. No password, browser cookie,
+assistant access token or model-supplied account ID becomes an upstream token.
+
+The lookup is still application-owned. In the exercise, existing fictional API
+credentials are provisioned for the two test accounts before sign-in. The flow
+proves how a verified identity selects one of those records; it does not issue
+credentials for an arbitrary external backend or implement a Laravel session
+handoff. Applications retain their current login and credential storage.
+
+Run the focused combined-flow checks on Node.js 24 after building:
+
+```sh
+node --test tests/workos-reference-http.test.mjs
+```
+
+## Try only the HTTP boundary
 
 From the repository root, after installing its locked dependencies:
 
@@ -38,6 +96,9 @@ redirects, and uses HTTPS except for the explicitly enabled loopback fixture.
 
 ## Files and integration points
 
+- `authenticated.mjs`: the verified account-to-credential composition to review first.
+- `login-exercise.mjs`, `login-demo.mjs`: the combined login/consent/MCP exercise.
+- `login-provider-fixture.mjs`: the signed local provider simulation used by that exercise.
 - `actions.mjs`: the strict tool input and public output, plus one action.
 - `client.mjs`: the bounded HTTP call and trusted `resolveCredential` hook.
 - `index.mjs`: composition with the existing SDK registry and Express router.
@@ -59,10 +120,12 @@ an account-bound read credential with explicit expiry and revocation; this
 client does not reduce the privileges of an overly broad API token. A shared
 administrator token plus an unverified user-ID header is not this pattern.
 
-This example does not implement browser sign-in, a Laravel session handoff,
-provider-account linking or a production grant store. The normal connection
-composition still needs trusted `authenticateSession` and `resolveAccount`
-hooks, configured authorization and durable approval state. See the
+The smaller `demo.mjs` uses simulated approvals and credential selection. The
+combined `login-demo.mjs` supplies the fictional app sign-in, configured provider
+bindings and SQLite approval store. A real application still supplies its
+`authenticateSession` and `resolveAccount` hooks, provider configuration, backend
+credentials and production storage. Laravel session handoff remains
+application-specific. See the
 [existing-app connection guide](../../docs/workos-connection.md).
 
 The assistant's OAuth access token and the backend's user credential are separate

@@ -10,7 +10,7 @@ This development branch adds optional packaged WorkOS connection and PostgreSQL 
 
 Gateivo runs in your backend. Your React Native, Flutter or native mobile interface can stay as it is. Claude has been tested with the separate SAGLY staging integration using fictional accounts. This repository's quickstart is a local MCP example, with simulated authorization.
 
-Have an existing Laravel or other HTTP backend? A separate Node adapter can call its authenticated, user-scoped API. The new [HTTP-backend source example](https://github.com/hoerlanton/gateivo-sdk/tree/feat/authenticated-reference/examples/http-backend) demonstrates that boundary with a local fixture. It does not establish Laravel compatibility or supply a session handoff. Laravel also has a native MCP option; compare the added service and connection-state work before choosing an adapter.
+Have an existing Laravel or other HTTP backend? A separate Node adapter can call its authenticated, user-scoped API. The [HTTP-backend source example](https://github.com/hoerlanton/gateivo-sdk/tree/feat/authenticated-reference/examples/http-backend) now includes a Node.js 24 login-to-credential exercise: app password/session, account binding, consent, signed-token verification and the HTTP read. The issuer and API are local fixtures; a real Laravel session integration is still application-specific. Laravel also has a native MCP option; compare the added service and connection-state work before choosing an adapter.
 
 ## Make your first tool call
 

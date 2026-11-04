@@ -6,6 +6,12 @@ It uses **fictional app accounts and workout records**. WorkOS and the assistant
 
 The password login here is a small fixture for the example. In your own app, keep your existing login and replace the two trusted hooks described below.
 
+For a complete login-to-HTTP-credential example, see the
+[combined HTTP-backend reference](../http-backend/README.md#start-with-the-verified-login-example).
+It reuses this password/session host and the packaged connection module, then
+resolves an account-bound upstream credential after the assistant token is
+verified. Its automated demo uses a signed synthetic issuer and a local API.
+
 For an existing Express app, start with the [connection integration guide](../../docs/workos-connection.md). The PostgreSQL path supports Node.js 22.6 within 22.x and Node.js 24 and does not need this fictional password host or SQLite. The example's `index.mjs` and `postgres-store.mjs` are thin compatibility reexports of the packaged module.
 
 ## Requirements

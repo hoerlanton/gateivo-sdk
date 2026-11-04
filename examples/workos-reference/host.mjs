@@ -101,6 +101,9 @@ function workoutActions(isAuthorized) {
 export async function createReferenceHost(options, dependencies = {}) {
   const config = validateHostConfig(options.config);
   const apiKey = validateTestApiKey(options.apiKey);
+  const appId = 'workouts-example';
+  const createActions = dependencies.createActions ?? (({ isAuthorized }) => workoutActions(isAuthorized));
+  if (typeof createActions !== 'function') throw new TypeError('Invalid trusted action factory.');
   const clock = dependencies.now ?? Date.now;
   const loadConfig = dependencies.loadConfig ?? (async () => config);
   const referenceFactory = dependencies.referenceFactory ?? createWorkOSReference;
@@ -144,15 +147,30 @@ export async function createReferenceHost(options, dependencies = {}) {
     return !signal?.aborted && current?.enabled
       ? Object.freeze({ providerSubject: current.providerSubject, enabled: true }) : null;
   };
+  // Source-example composition hook. It receives the SDK's verified principal,
+  // never browser/tool arguments, and exposes only the current canonical binding.
+  // Delegated reads do not require an active browser session or its cookie.
+  const resolveApplicationAccount = async (principal, { signal } = {}) => {
+    if (closed || signal?.aborted || principal?.appId !== appId
+      || typeof principal.subject !== 'string') return null;
+    const current = await account(principal.subject);
+    if (closed || signal?.aborted || !current?.enabled) return null;
+    return Object.freeze({ appId, subject: current.id, issuer: config.issuer,
+      providerSubject: current.providerSubject, authVersion: accountVersion(current) });
+  };
 
   let assistantAccess;
   try {
-    assistantAccess = referenceFactory({ appId: 'workouts-example', publicUrl: config.publicUrl,
+    const actions = createActions(Object.freeze({ appId,
+      isAuthorized: (principal, context) => assistantAccess?.isAuthorized(principal, context) ?? false,
+      resolveApplicationAccount,
+    }));
+    assistantAccess = referenceFactory({ appId, publicUrl: config.publicUrl,
       issuer: config.issuer, clientId: config.clientId, applicationId: config.applicationId,
       apiKey, accessTokenType: config.accessTokenType, requiredScopes: ['workouts:read'],
       secret, store, authenticateSession, resolveAccount,
       trustProxyHttps: config.transport === 'loopback-proxy',
-      actions: workoutActions((principal, context) => assistantAccess.isAuthorized(principal, context)),
+      actions,
     }, dependencies.provider ?? {});
   } catch (error) {
     if (ownedStore) await store.close();

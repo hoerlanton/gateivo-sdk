@@ -51,6 +51,9 @@ jobs:
       - name: Check authenticated reference (Node 24)
         if: matrix.node == '24.x'
         run: npm run test:workos
+      - name: Exercise verified login through the HTTP credential lookup (Node 24)
+        if: matrix.node == '24.x'
+        run: node examples/http-backend/login-demo.mjs
       - name: Verify isolated authenticated reference (Node 24)
         if: matrix.node == '24.x'
         run: npm run verify:workos

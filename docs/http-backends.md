@@ -6,9 +6,12 @@ authenticated HTTP API instead of calling a service in the same process. This
 allows a publisher to evaluate a separate Node adapter alongside an existing
 backend, without moving its business logic or application database.
 
-The [runnable source example](../examples/http-backend/README.md) tests that HTTP
-boundary against a fictional JavaScript server. It does not execute Laravel,
-verify a real user's login, or establish hosted assistant/OAuth compatibility.
+The [runnable source example](../examples/http-backend/README.md) includes a
+combined password/session, consent, signed-token and HTTP-read exercise on
+Node.js 24. It verifies fictional app logins through the existing reference host
+and tests the API boundary against a JavaScript server. Its identity provider is
+a signed synthetic fixture. It does not execute Laravel or establish hosted
+provider/assistant compatibility.
 
 ## First compare the native option
 
@@ -96,7 +99,42 @@ to the actual app. Keep any stricter existing controls. Sanctum API-token
 authentication and SPA cookie authentication are different flows; the example
 does not implement either. See [Sanctum's official guide](https://laravel.com/framework/docs/13.x/sanctum).
 
-## Account login is a separate integration
+## From verified login to credential lookup
+
+[`authenticated.mjs`](../examples/http-backend/authenticated.mjs) composes the
+existing login reference with the HTTP action. The runnable chain is:
+
+1. The reference host verifies a fictional app password and creates an opaque,
+   secure app session. The session resolves a canonical account server-side.
+2. The connection module checks that session and the configured account/provider
+   binding before starting explicit assistant consent.
+3. The PKCE callback validates the signed provider identity against that binding
+   and records a bounded grant. Later MCP requests use a separate bearer token;
+   browser session cookies do not authenticate tool calls.
+4. The SDK verifies the bearer token and its exact current grant, producing the
+   application principal passed to the action.
+5. The adapter resolves that principal to the current enabled app account and
+   its authentication version, then looks up an existing credential record bound
+   to those exact fields. It rechecks current authority and expiry before using
+   the credential and after the HTTP read.
+6. The upstream API authenticates its own credential and applies ownership,
+   entitlement and service rules. The adapter returns the public projection.
+
+The credential record contains `appId`, `subject`, `issuer`, `providerSubject`,
+`authVersion`, `credential` and `expiresAt`. The lookup is a trusted application
+hook, not an account or credential supplied by the model. Its binding metadata
+must be correct; the upstream backend remains responsible for verifying the
+credential and its permissions. Existing backend credentials are provisioned
+before login in the test fixture. This flow does not turn an app password or
+assistant token into a Laravel credential.
+
+Browser sign-out ends the browser session. Existing assistant permission has its
+own grant lifetime and explicit disconnect control. An authentication-version
+change invalidates the old app session and stale credential-binding records;
+it does not by itself create a permanent delegated-grant revocation record.
+Disconnect retains that separate revocation history across reconnect.
+
+## Connect the real application's login
 
 Gateivo's browser-session hook must verify the existing application session and
 return the canonical account, a stable opaque session ID, authentication version
@@ -108,8 +146,9 @@ With one public origin, an application-owned reverse proxy can route the login
 and connection paths to their respective services, and a trusted server-side
 verification hook can ask Laravel to verify its own session. A separate origin
 needs an explicit authenticated handoff. Neither forwarding a cookie nor adding
-CORS configuration establishes identity by itself. Gateivo does not automatically
-decode Laravel cookies or provide that handoff in this example.
+CORS configuration establishes identity by itself. The combined reference
+verifies its own app sessions; it does not decode Laravel cookies or implement
+the application-specific Laravel handoff.
 
 Keep the assistant MCP endpoint on bearer-token authentication. Browser login
 redirects must not wrap `/agent/mcp` or its public discovery metadata. The

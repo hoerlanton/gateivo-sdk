@@ -7,13 +7,13 @@ import { APP_ID, publicWorkout, workoutId } from './actions.mjs';
  * and obtaining that user's permission for this bridge remain publisher work.
  * Never substitute an admin token, a tool argument, or the assistant's OAuth token.
  *
- * @param {{ baseUrl: string,
+ * @param {{ baseUrl: string, appId?: string,
  *   resolveCredential: (principal: Readonly<import('@gateivo/sdk').Principal>,
  *     context: {signal: AbortSignal}) => Promise<string|null>,
  *   timeoutMs?: number, maxResponseBytes?: number, allowLoopbackHttp?: boolean }} options
  */
 export function createHttpBackendClient({
-  baseUrl, resolveCredential, timeoutMs = 1500, maxResponseBytes = 16 * 1024,
+  baseUrl, resolveCredential, appId = APP_ID, timeoutMs = 1500, maxResponseBytes = 16 * 1024,
   allowLoopbackHttp = false,
 }) {
   const base = new URL(baseUrl);
@@ -24,7 +24,8 @@ export function createHttpBackendClient({
       && base.protocol === 'http:' && base.hostname === '127.0.0.1'))) {
     throw new TypeError('Configure one trusted HTTPS backend origin.');
   }
-  if (typeof resolveCredential !== 'function'
+  if (typeof resolveCredential !== 'function' || typeof appId !== 'string'
+    || !/^[\x21-\x7e]{1,128}$/.test(appId)
     || !Number.isSafeInteger(timeoutMs) || timeoutMs < 1 || timeoutMs > 10_000
     || !Number.isSafeInteger(maxResponseBytes) || maxResponseBytes < 1
     || maxResponseBytes > 1024 * 1024) throw new TypeError('Invalid HTTP backend limits or hook.');
@@ -33,7 +34,7 @@ export function createHttpBackendClient({
     /** @param {string} id @param {import('@gateivo/sdk').ActionContext} context */
     async getMyWorkout(id, { principal, signal }) {
       if (!workoutId.safeParse(id).success) throw new AccessError('INVALID_ARGUMENT');
-      if (principal?.appId !== APP_ID) throw new AccessError('FORBIDDEN');
+      if (principal?.appId !== appId) throw new AccessError('FORBIDDEN');
       const controller = new AbortController();
       const active = AbortSignal.any([signal, controller.signal]);
       let timer;

@@ -23,6 +23,24 @@ test('backend origin is exact trusted configuration; HTTP is explicitly loopback
     resolveCredential, allowLoopbackHttp: true }));
 });
 
+test('a configured application ID remains an exact credential-lookup boundary', async () => {
+  let lookups = 0;
+  const options = { baseUrl: 'https://backend.example',
+    resolveCredential: async () => { lookups++; return null; } };
+  for (const appId of ['', 'app with spaces', 'a'.repeat(129), null]) {
+    assert.throws(() => createHttpBackendClient({ ...options, appId }), TypeError);
+  }
+  const backend = createHttpBackendClient({ ...options, appId: 'workouts-example' });
+  const context = { signal: new AbortController().signal,
+    principal: { appId: APP_ID, subject: 'alice', scopes: ['workouts:read'], expiresAt: Date.now() + 5000 } };
+  await assert.rejects(backend.getMyWorkout('workout-alice-1', context), error => error.code === 'FORBIDDEN');
+  assert.equal(lookups, 0);
+  await assert.rejects(backend.getMyWorkout('workout-alice-1', {
+    ...context, principal: { ...context.principal, appId: 'workouts-example' },
+  }), error => error.code === 'FORBIDDEN');
+  assert.equal(lookups, 1);
+});
+
 test('uncooperative credential hook is bounded; pre-cancel and invalid identity never call it', async () => {
   let calls = 0;
   const backend = createHttpBackendClient({ baseUrl: 'https://backend.example', timeoutMs: 25,
