@@ -120,9 +120,12 @@ export function createWorkOSConnectionRuntime(options, dependencies = {}) {
     authorize: (_action, context) => active(context.principal, context), audit: options.audit }) : undefined;
 
   router.use((req, res, next) => {
-    const ownedPath = req.path === '/agent/mcp' || req.path.startsWith('/agent/mcp/')
-      || req.path === '/account/assistant' || req.path.startsWith('/account/assistant/')
-      || req.path === oauth.metadataPath;
+    // Express mounts below match paths case-insensitively by default. The
+    // transport and cutoff guard must cover the same paths as those mounts.
+    const path = req.path.toLowerCase();
+    const ownedPath = path === '/agent/mcp' || path.startsWith('/agent/mcp/')
+      || path === '/account/assistant' || path.startsWith('/account/assistant/')
+      || path === oauth.metadataPath.toLowerCase();
     if (!ownedPath) { next(); return; }
     if (req.headers.host !== origin.host
       || !(trustProxyHttps ? req.headers['x-forwarded-proto'] === 'https' : req.socket.encrypted === true)) {

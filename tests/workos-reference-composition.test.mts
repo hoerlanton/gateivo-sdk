@@ -131,6 +131,22 @@ test('default mode still requires actions and owns its authenticated MCP route',
   assert.equal(h.calls.provider, 0);
 });
 
+test('case variants cannot bypass HTTPS or the access cutoff on owned routes', async t => {
+  const action = { name: 'example_read', title: 'Read', description: 'Read example',
+    requiredScopes: ['workouts:read'], inputSchema: z.strictObject({}),
+    outputSchema: z.strictObject({ ok: z.boolean() }), execute: async () => ({ ok: true }) };
+  const active = fixture({ mountMcp: true, actions: [action] });
+  const request = await serve(t, active.reference);
+  for (const route of ['/agent/mcp', '/AGENT/MCP', '/Account/Assistant']) {
+    assert.equal((await request(route, undefined, { 'x-forwarded-proto': 'http' })).status, 403, route);
+  }
+  const expired = fixture({ mountMcp: true, actions: [action], accessExpiresAt: Date.now() - 1 });
+  const expiredRequest = await serve(t, expired.reference);
+  for (const route of ['/agent/mcp', '/AGENT/MCP', '/Account/Assistant']) {
+    assert.equal((await expiredRequest(route)).status, 410, route);
+  }
+});
+
 test('an elapsed fixed cutoff is valid configuration and closes controls, verifier and grant checks', async t => {
   const h = fixture({ accessExpiresAt: Date.now() - 1 });
   const request = await serve(t, h.reference);

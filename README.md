@@ -17,7 +17,8 @@ Have an existing Laravel or other HTTP backend? A separate Node adapter can call
 Use **Node.js 22.6+ within 22.x, or Node.js 24.x**, with npm. This preview supports Express 4 and JavaScript or TypeScript.
 
 ```sh
-git clone https://github.com/hoerlanton/gateivo-sdk.git
+# This unreleased branch contains preview.7; the default branch does not.
+git clone --branch feat/authenticated-reference https://github.com/hoerlanton/gateivo-sdk.git
 cd gateivo-sdk
 npm ci
 npm run build
@@ -34,7 +35,7 @@ For a new email/password integration, `@gateivo/sdk/workos-connect/password` com
 
 The [WorkOS reference app](examples/workos-reference) adds a fictional application login and explicitly configured account mappings around the optional connection module. This fictional host requires **Node.js 24** for its private SQLite store and a separately configured WorkOS development environment. Follow its README to generate private local settings and run it behind an HTTPS reverse proxy.
 
-To integrate with your own existing login, use the [packaged connection module](docs/workos-connection.md): authenticate the app session, then resolve the account's verified provider binding. An optional PostgreSQL adapter uses your app's existing pool. This path supports Node.js 22.6 within 22.x and Node.js 24 without SQLite. The example's password login is only for its fictional accounts.
+To integrate with your own existing login, use the [packaged connection module](docs/workos-connection.md): authenticate the app session, then resolve the account's verified provider binding. An optional PostgreSQL adapter uses your app's existing pool. This path supports Node.js 22.6 within 22.x and Node.js 24 without SQLite. The reference app’s own password login is only for its fictional accounts; the separate packaged password adapter is described above.
 
 ```sh
 # From a built checkout, using Node.js 24:
@@ -102,7 +103,7 @@ This is an integration outline. Your application supplies the named services and
 | Typed action definitions and strict input/output validation | Existing service functions, ownership and business rules |
 | App, scope and principal-expiry checks; optional token verifiers | Existing account identity, current entitlements and owner-scoped reads |
 | MCP Streamable HTTP transport and protected-resource metadata helpers | Authorization server configuration, HTTPS deployment and verified account linking |
-| Optional WorkOS approval/callback/disconnect/reconnect composition | Existing session authentication and trusted provider-account bindings |
+| Optional WorkOS approval/callback/disconnect/reconnect composition and preview password-login adapter | App-owned credential verification or an existing verified session, plus current account and entitlement checks |
 | Optional PostgreSQL approval store using your pool | Database hosting, TLS, explicit migrations and preservation of revocation history |
 | Request/body limits, timeouts and process-local concurrency bounds | HTTPS hosting, shared quotas and bounded service/database operations |
 | Optional best-effort audit hook with outcomes, error codes and timing | Log storage, monitoring, alerts and retention |
@@ -120,7 +121,7 @@ The current action API is read-only in intent. Your handlers are ordinary applic
 | `createOAuthJwtVerifier` | Verify the supported RFC 9068 token profile with a required live grant resolver. |
 | `AccessError` | Return a deliberate, sanitized application error. |
 
-The root export is provider-neutral. Focused imports are available from `@gateivo/sdk/core`, `/express` and `/oauth`. The optional `/workos-connect` entry supplies a WorkOS HTTP provider and verifier; it still requires your identity mapping, durable consent state and deployment-specific lifecycle checks.
+The root export is provider-neutral. Focused imports are available from `@gateivo/sdk/core`, `/express` and `/oauth`. The optional `/workos-connect` entry supplies a WorkOS HTTP provider and verifier. This branch also includes an unreleased [password login composition](docs/password-login.md), which creates a controlled identity binding after the publisher verifies the user. It still requires durable consent state and deployment-specific lifecycle checks.
 
 The unreleased optional `@gateivo/sdk/workos-connect/express` entry adds `createWorkOSConnection`, which composes approval pages, callbacks, exact consent checks and MCP routing around your existing login. `@gateivo/sdk/workos-connect/postgres` supplies `createWorkOSPostgresStore` with an application-owned pool. Neither entry adds WorkOS, database or hosting accounts automatically. See the [integration guide](docs/workos-connection.md).
 
@@ -143,7 +144,7 @@ There is no public npm registry release yet. To build an archive locally instead
 npm run pack:preview
 
 # In your own backend, using the archive path reported by that command:
-npm install /path/to/gateivo-sdk-0.1.0-preview.5.tgz
+npm install /path/to/the-generated-gateivo-sdk-archive.tgz
 ```
 
 Preview archives and checksums appear on the [GitHub Releases page](https://github.com/hoerlanton/gateivo-sdk/releases). Each archive must be checked using the clean-consumer verification before release.
