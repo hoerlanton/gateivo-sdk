@@ -862,7 +862,7 @@ try {
   assert.equal(pack.name, manifest.name);
   assert.equal(pack.version, manifest.version);
   for (const file of pack.files) {
-    assert.ok(['package.json', 'README.md', 'LICENSE', 'SECURITY.md', 'docs/authentication.md', 'docs/workos-connection.md', 'docs/workos-reference.md'].includes(file.path) || /^dist\/[A-Za-z0-9_-]+(?:\.d\.(?:ts|cts)|\.(?:js|cjs))$/.test(file.path));
+    assert.ok(['package.json', 'README.md', 'LICENSE', 'SECURITY.md', 'docs/authentication.md', 'docs/workos-connection.md', 'docs/workos-reference.md', 'docs/password-login.md'].includes(file.path) || /^dist\/[A-Za-z0-9_-]+(?:\.d\.(?:ts|cts)|\.(?:js|cjs))$/.test(file.path));
     assert.doesNotMatch(file.path, /sagly|pilot|\.env|secret|service/i);
   }
   for (const entry of ['workos-connect', 'workos-connect-express', 'workos-connect-postgres']) {
