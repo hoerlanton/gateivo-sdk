@@ -9,10 +9,11 @@ import { gunzipSync } from 'node:zlib';
 const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
 const artifacts = path.join(root, 'artifacts');
 const requiredDocuments = ['README.md', 'LICENSE', 'docs/authentication.md', 'docs/workos-connection.md',
-  'docs/workos-reference.md', 'SECURITY.md'];
+  'docs/workos-reference.md', 'docs/password-login.md', 'SECURITY.md'];
 const exampleFiles = ['actions.mjs', 'client.mjs', 'constants.mjs', 'demo-approvals.mjs',
   'index.mjs', 'repository.mjs', 'server.mjs', 'exercise.mjs'];
-const entries = ['index', 'core', 'express', 'oauth', 'workos-connect', 'workos-connect-express', 'workos-connect-postgres'];
+const entries = ['index', 'core', 'express', 'oauth', 'workos-connect', 'workos-connect-express', 'workos-connect-postgres',
+  'login-express', 'login-postgres', 'workos-standalone', 'workos-password'];
 const extensions = ['js', 'cjs', 'd.ts', 'd.cts'];
 const distPattern = /^dist\/[A-Za-z0-9_-]+(?:\.d\.(?:ts|cts)|\.(?:js|cjs))$/;
 const maxFileBytes = 16 * 1024 * 1024;

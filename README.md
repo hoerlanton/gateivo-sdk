@@ -4,7 +4,7 @@ Expose selected backend functions as scoped tools for AI assistants. Keep your e
 
 **Experimental developer preview · Node.js / Express 4 · Read-only action interfaces**
 
-This development branch adds optional packaged WorkOS connection and PostgreSQL adapters for the next preview. They are not in the published `0.1.0-preview.5` archive. See the [existing-app connection guide](docs/workos-connection.md) for the new integration path.
+This development branch prepares **preview.7**, including optional packaged browser password-login, WorkOS identity handoff and PostgreSQL adapters. They are not in the published `0.1.0-preview.5` archive. For existing password accounts, start with the [packaged login integration](docs/password-login.md); apps with an existing verified browser session can use the [connection guide](docs/workos-connection.md).
 
 [Gateivo website](https://gateivo.com) · [Authentication and responsibilities](docs/authentication.md) · [Report an integration issue](https://github.com/hoerlanton/gateivo-sdk/issues) · [Contact](mailto:anton@gateivo.com)
 
@@ -29,6 +29,8 @@ The demo starts a temporary loopback server and uses the official MCP client to 
 Read the [workouts example](https://github.com/hoerlanton/gateivo-sdk/tree/main/examples/workouts) to see how existing owner-scoped service functions become tools. Its in-memory approvals are a local simulation; connecting Claude remotely requires real delegated authorization and HTTPS.
 
 ## Try an account-linked reference app
+
+For a new email/password integration, `@gateivo/sdk/workos-connect/password` composes the shared login pages, browser sessions, identity handoff, consent and MCP endpoint. The publisher supplies two trusted credential/current-account hooks and owned service actions. The [integration contract](docs/password-login.md) explains the required account creation key, authentication revision, explicit migrations and deployment limits. This is an unreleased, WorkOS-development-only adapter.
 
 The [WorkOS reference app](examples/workos-reference) adds a fictional application login and explicitly configured account mappings around the optional connection module. This fictional host requires **Node.js 24** for its private SQLite store and a separately configured WorkOS development environment. Follow its README to generate private local settings and run it behind an HTTPS reverse proxy.
 
@@ -148,7 +150,7 @@ Preview archives and checksums appear on the [GitHub Releases page](https://gith
 
 ## Current scope
 
-- Published archive: `0.1.0-preview.5`. This branch prepares `0.1.0-preview.6`; changes may be required between previews.
+- Published archive: `0.1.0-preview.5`. This branch prepares `0.1.0-preview.7`; changes may be required between previews. The existing SAGLY staging deployment remains pinned to its earlier preview.6 candidate.
 - Node.js/Express backend integration. There is no frontend or React Native SDK.
 - Claude is the tested remote assistant in the separate staging pilot. Other assistants require their own validation.
 - No hosted Gateivo account/consent portal, durable log service, billing, automatic subscription enforcement or write-transaction workflow is included.

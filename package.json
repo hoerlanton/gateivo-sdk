@@ -1,6 +1,6 @@
 {
   "name": "@gateivo/sdk",
-  "version": "0.1.0-preview.6",
+  "version": "0.1.0-preview.7",
   "private": true,
   "description": "Expose selected read-only backend functions as authenticated MCP tools for AI assistants",
   "license": "MIT",
@@ -78,6 +78,46 @@
         "types": "./dist/workos-connect-postgres.d.cts",
         "default": "./dist/workos-connect-postgres.cjs"
       }
+    },
+    "./login/express": {
+      "import": {
+        "types": "./dist/login-express.d.ts",
+        "default": "./dist/login-express.js"
+      },
+      "require": {
+        "types": "./dist/login-express.d.cts",
+        "default": "./dist/login-express.cjs"
+      }
+    },
+    "./login/postgres": {
+      "import": {
+        "types": "./dist/login-postgres.d.ts",
+        "default": "./dist/login-postgres.js"
+      },
+      "require": {
+        "types": "./dist/login-postgres.d.cts",
+        "default": "./dist/login-postgres.cjs"
+      }
+    },
+    "./workos-connect/standalone": {
+      "import": {
+        "types": "./dist/workos-standalone.d.ts",
+        "default": "./dist/workos-standalone.js"
+      },
+      "require": {
+        "types": "./dist/workos-standalone.d.cts",
+        "default": "./dist/workos-standalone.cjs"
+      }
+    },
+    "./workos-connect/password": {
+      "import": {
+        "types": "./dist/workos-password.d.ts",
+        "default": "./dist/workos-password.js"
+      },
+      "require": {
+        "types": "./dist/workos-password.d.cts",
+        "default": "./dist/workos-password.cjs"
+      }
     }
   },
   "files": [
@@ -87,6 +127,7 @@
     "docs/authentication.md",
     "docs/workos-connection.md",
     "docs/workos-reference.md",
+    "docs/password-login.md",
     "SECURITY.md"
   ],
   "engines": {
@@ -125,14 +166,16 @@
     "verify:workos": "node scripts/verify-workos-reference.mjs",
     "verify:workos:postgres": "node scripts/verify-workos-reference.mjs --postgres",
     "reference:setup": "node examples/workos-reference/setup.mjs",
-    "reference:start": "node examples/workos-reference/host.mjs"
+    "reference:start": "node examples/workos-reference/host.mjs",
+    "test:login": "node --import tsx --test tests/login*.test.* tests/workos-standalone*.test.*"
   },
   "devDependencies": {
     "@modelcontextprotocol/client": "2.4.0",
     "@types/node": "22.20.5",
     "tsup": "8.5.1",
     "tsx": "4.23.15",
-    "typescript": "5.9.3"
+    "typescript": "5.9.3",
+    "pg": "8.16.3"
   },
   "overrides": {
     "esbuild": "0.28.2"

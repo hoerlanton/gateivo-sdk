@@ -62,6 +62,10 @@ import { createAgentRouter, type AgentRouterOptions } from '@gateivo/sdk/express
 import { createOAuthResource } from '@gateivo/sdk/oauth';
 import { createWorkOSConnection } from '@gateivo/sdk/workos-connect/express';
 import { createWorkOSPostgresStore } from '@gateivo/sdk/workos-connect/postgres';
+import { createPasswordLogin } from '@gateivo/sdk/login/express';
+import { createLoginPostgresStore } from '@gateivo/sdk/login/postgres';
+import { createWorkOSStandaloneLogin } from '@gateivo/sdk/workos-connect/standalone';
+import { createWorkOSPasswordConnection } from '@gateivo/sdk/workos-connect/password';
 import { z } from 'zod/v4';
 
 const action = defineAction({
@@ -103,6 +107,18 @@ void new AccessError('FORBIDDEN');
 
 // These contracts must be usable from an independently installed archive with
 // no copied composition source, provider SDK, pg declarations or permissive any.
+type PasswordOptions = Parameters<typeof createWorkOSPasswordConnection>[0];
+type LoginOptions = Parameters<typeof createPasswordLogin>[0];
+type StandaloneOptions = Parameters<typeof createWorkOSStandaloneLogin>[0];
+declare const loginPool: Parameters<typeof createLoginPostgresStore>[0]['pool'];
+createLoginPostgresStore({ pool: loginPool, appId: 'workouts' });
+type LoginIsAny<T> = 0 extends (1 & T) ? true : false;
+const passwordOptionsAreTyped: LoginIsAny<PasswordOptions> = false;
+const loginOptionsAreTyped: LoginIsAny<LoginOptions> = false;
+const standaloneOptionsAreTyped: LoginIsAny<StandaloneOptions> = false;
+// @ts-expect-error Publisher credential verification is required.
+createWorkOSPasswordConnection({});
+void passwordOptionsAreTyped; void loginOptionsAreTyped; void standaloneOptionsAreTyped;
 type ConnectionOptions = Parameters<typeof createWorkOSConnection>[0];
 type IsAny<Value> = 0 extends (1 & Value) ? true : false;
 const connectionOptionsAreTyped: IsAny<ConnectionOptions> = false;
@@ -170,6 +186,14 @@ const bootstrapFixture = String.raw`const assert = require('node:assert/strict')
   const workos = await import('@gateivo/sdk/workos-connect');
   const connection = await import('@gateivo/sdk/workos-connect/express');
   const postgres = await import('@gateivo/sdk/workos-connect/postgres');
+  const login = await import('@gateivo/sdk/login/express');
+  const loginStore = await import('@gateivo/sdk/login/postgres');
+  const standalone = await import('@gateivo/sdk/workos-connect/standalone');
+  const password = await import('@gateivo/sdk/workos-connect/password');
+  assert.equal(typeof login.createPasswordLogin, 'function');
+  assert.equal(typeof loginStore.createLoginPostgresStore, 'function');
+  assert.equal(typeof standalone.createWorkOSStandaloneLogin, 'function');
+  assert.equal(typeof password.createWorkOSPasswordConnection, 'function');
   const example = await import('./index.mjs');
   assert.equal(sdk.AccessError, core.AccessError);
   assert.equal(sdk.createAgentRouter, expressEntry.createAgentRouter);
@@ -500,7 +524,7 @@ try {
   assert.equal(pack.version, manifest.version);
   const packedFiles = pack.files.map((file) => file.path).sort();
   for (const file of packedFiles) {
-    assert.ok(['package.json', 'README.md', 'LICENSE', 'NOTICE', 'SECURITY.md', 'docs/authentication.md', 'docs/workos-connection.md', 'docs/workos-reference.md'].includes(file) || /^dist\/[A-Za-z0-9_-]+(?:\.d\.(?:ts|cts)|\.(?:js|cjs))$/.test(file), `Unexpected tarball file: ${file}`);
+    assert.ok(['package.json', 'README.md', 'LICENSE', 'NOTICE', 'SECURITY.md', 'docs/authentication.md', 'docs/workos-connection.md', 'docs/workos-reference.md', 'docs/password-login.md'].includes(file) || /^dist\/[A-Za-z0-9_-]+(?:\.d\.(?:ts|cts)|\.(?:js|cjs))$/.test(file), `Unexpected tarball file: ${file}`);
     assert.doesNotMatch(file, /sagly|pilot|\.env|secret|service/i);
   }
   assert.ok(packedFiles.includes('README.md'), 'Tarball must contain developer documentation');

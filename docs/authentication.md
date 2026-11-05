@@ -40,7 +40,9 @@ The public local workouts example does not configure a real provider. It deliber
 
 For an existing application, the unreleased optional [`@gateivo/sdk/workos-connect/express` composition](workos-connection.md) supplies approval pages, callback handling and disconnect/reconnect around trusted application hooks. The optional PostgreSQL store uses the application's pool and persistent schema. Developers still configure the provider, authenticate existing sessions and supply verified account bindings. These additions are not in the published preview.5 archive.
 
-The separate [fictional WorkOS host](https://github.com/hoerlanton/gateivo-sdk/blob/main/docs/workos-reference.md) supplies example login and private SQLite persistence on Node.js 24. That password host and setup generator remain source examples, outside the runtime archive. The SDK does not provision the provider application, link customer accounts automatically or operate a hosted consent service.
+The unreleased optional [`@gateivo/sdk/workos-connect/password` composition](password-login.md) packages browser password-login, session storage and controlled Standalone Connect identity preparation. The publisher's credential-verification and current-account hooks remain authoritative. From a verified app session, preparation can create the provider user for the exact app-derived external ID and persist its immutable app-account/provider binding. It never discovers or links an existing provider account by matching email. Assistant consent remains a separate step; later token-subject resolution only reads the established binding.
+
+The separate [fictional WorkOS host](workos-reference.md) supplies example login and private SQLite persistence on Node.js 24. That fictional password host and setup generator remain source examples, outside the runtime archive; they are separate from the packaged password-login module. Provider application/client configuration stays with the publisher, and Gateivo does not operate a hosted login or consent service.
 
 ## Operations
 

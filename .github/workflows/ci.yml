@@ -57,6 +57,17 @@ jobs:
       - name: Verify isolated authenticated reference (Node 24)
         if: matrix.node == '24.x'
         run: npm run verify:workos
+      - name: Check reusable login and identity handoff
+        env:
+          GATEIVO_LOGIN_TEST_DATABASE_URL: postgresql://gateivo_test:fictional_ci_only@127.0.0.1:5432/gateivo_login_test
+        run: |
+          node --input-type=module <<'NODE'
+          import { Pool } from 'pg';
+          const pool = new Pool({connectionString: 'postgresql://gateivo_test:fictional_ci_only@127.0.0.1:5432/gateivo_reference_test'});
+          await pool.query('CREATE DATABASE gateivo_login_test');
+          await pool.end();
+          NODE
+          npm run test:login
       - name: Verify packaged connection with PostgreSQL
         env:
           GATEIVO_REFERENCE_TEST_DATABASE_URL: postgresql://gateivo_test:fictional_ci_only@127.0.0.1:5432/gateivo_reference_test

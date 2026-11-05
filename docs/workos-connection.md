@@ -1,5 +1,7 @@
 # Add assistant connections to an existing Express app
 
+If your app has email/password accounts but no browser session for assistant approval, use the [packaged password-login composition](password-login.md). It supplies the shared browser/session and external-identity handoff around the two publisher authentication hooks. The lower-level API below remains useful for applications that already supply verified browser sessions and provider bindings.
+
 **Unreleased development API.** These optional imports are being prepared for the next preview archive. The published `0.1.0-preview.5` archive does not include them. Build and install an archive from this branch to evaluate them; this is not an npm registry release.
 
 ```js
