@@ -24,7 +24,7 @@ const packed = await execute(
 const [archive] = JSON.parse(packed.stdout);
 assert.equal(archive.filename, `gateivo-sdk-${manifest.version}.tgz`);
 const permitted = (name) => name === 'package.json' || name === 'README.md' || name === 'LICENSE'
-  || name === 'docs/authentication.md' || name === 'SECURITY.md'
+  || ['docs/authentication.md', 'docs/workos-connection.md', 'docs/workos-reference.md', 'docs/password-login.md', 'SECURITY.md'].includes(name)
   || name.startsWith('dist/');
 for (const file of archive.files) assert.ok(permitted(file.path), `Unexpected package file: ${file.path}`);
 const bytes = await readFile(path.join(artifacts, archive.filename));

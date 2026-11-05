@@ -8,10 +8,12 @@ import { gunzipSync } from 'node:zlib';
 
 const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
 const artifacts = path.join(root, 'artifacts');
-const requiredDocuments = ['README.md', 'LICENSE', 'docs/authentication.md', 'SECURITY.md'];
+const requiredDocuments = ['README.md', 'LICENSE', 'docs/authentication.md', 'docs/workos-connection.md',
+  'docs/workos-reference.md', 'docs/password-login.md', 'SECURITY.md'];
 const exampleFiles = ['actions.mjs', 'client.mjs', 'constants.mjs', 'demo-approvals.mjs',
   'index.mjs', 'repository.mjs', 'server.mjs', 'exercise.mjs'];
-const entries = ['index', 'core', 'express', 'oauth', 'workos-connect'];
+const entries = ['index', 'core', 'express', 'oauth', 'workos-connect', 'workos-connect-express', 'workos-connect-postgres',
+  'login-express', 'login-postgres', 'workos-standalone', 'workos-password'];
 const extensions = ['js', 'cjs', 'd.ts', 'd.cts'];
 const distPattern = /^dist\/[A-Za-z0-9_-]+(?:\.d\.(?:ts|cts)|\.(?:js|cjs))$/;
 const maxFileBytes = 16 * 1024 * 1024;
@@ -166,7 +168,29 @@ async function main() {
       'The workouts example changed after consumer verification. Rerun both consumer checks.');
     }
   }
-  console.log(`Release readiness passed for ${manifest.name}@${manifest.version}: archive, current files and two isolated consumer runtimes match.`);
+  for (const [reportName, expectedMajor] of [
+    ['workos-postgres-node22-verification.json', 22], ['workos-postgres-verification.json', 24],
+  ]) {
+    const report = await readJson(path.join(artifacts, reportName));
+    const version = typeof report.node === 'string' && /^v(\d+)\.(\d+)\.(\d+)$/.exec(report.node);
+    requireCondition(version && Number(version[1]) === expectedMajor
+      && (expectedMajor !== 22 || Number(version[2]) >= 6)
+      && report.status === 'passed' && report.isolatedInstallation === true
+      && report.storage === 'postgresql',
+    'Packaged connection acceptance must pass with PostgreSQL on Node 22.6+ and Node 24 separately.');
+    requireCondition(report.package?.name === manifest.name && report.package?.version === manifest.version
+      && report.package?.integrity === integrity && report.package?.fileCount === files.length,
+    'A PostgreSQL connection report tested a different archive. Rerun packaged connection acceptance.');
+    const exampleHashes = report.example?.files;
+    requireCondition(exampleHashes && Object.keys(exampleHashes).length > 0,
+      'The connection acceptance report must record its reference source files.');
+    for (const [name, hash] of Object.entries(exampleHashes)) {
+      requireCondition(/^[A-Za-z0-9_-]+\.mjs$/.test(name) && /^[a-f0-9]{64}$/.test(hash)
+        && hash === digest(await readLocal(path.join(root, 'examples/workos-reference', name)), 'sha256'),
+      'Connection reference source changed after acceptance. Rerun packaged connection acceptance.');
+    }
+  }
+  console.log(`Release readiness passed for ${manifest.name}@${manifest.version}: archive, current files, two SDK consumers and two packaged PostgreSQL connection runtimes match.`);
   console.log('Local check only; registry publishing remains disabled. Build before packing: source-to-dist compilation freshness is not recorded by these receipts.');
 }
 
@@ -174,6 +198,6 @@ try {
   await main();
 } catch (error) {
   console.error(error instanceof ReadinessError ? error.message
-    : 'Unable to read or parse local release artifacts. Build, pack and verify both consumer runtimes before retrying.');
+    : 'Unable to read or parse local release artifacts. Build, pack and verify SDK and PostgreSQL connection consumers on Node 22.6+ and Node 24 before retrying.');
   process.exitCode = 1;
 }
