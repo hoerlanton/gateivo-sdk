@@ -3,6 +3,7 @@ import { createServer, request } from 'node:http';
 import { test, type TestContext } from 'node:test';
 import express from 'express';
 import { Client, StreamableHTTPClientTransport } from '@modelcontextprotocol/client';
+import packageInfo from '../package.json' with { type: 'json' };
 import { z } from 'zod/v4';
 import { createAgentRouter, type AgentRouterOptions } from '../src/http.js';
 import { createActionRegistry } from '../src/core.js';
@@ -69,6 +70,15 @@ async function harness(t: TestContext, overrides: Partial<AgentRouterOptions> = 
   }
   return { url, post, client, calls: () => calls, audit, tokens };
 }
+
+test('MCP clients see the installed SDK name and version', async (t) => {
+  const h = await harness(t);
+  const client = await h.client('alice');
+  const info = client.getServerVersion();
+  assert.deepEqual({ name: info?.name, version: info?.version }, {
+    name: packageInfo.name, version: packageInfo.version,
+  });
+});
 
 test('HTTP rejects missing, invalid and expired credentials before any app read', async (t) => {
   const h = await harness(t);
