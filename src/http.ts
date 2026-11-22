@@ -3,6 +3,7 @@ import express, { type ErrorRequestHandler } from 'express';
 import { hostHeaderValidation } from '@modelcontextprotocol/express';
 import { toNodeHandler } from '@modelcontextprotocol/node';
 import { createMcpHandler, McpServer } from '@modelcontextprotocol/server';
+import packageInfo from '../package.json' with { type: 'json' };
 import { createActionRegistry } from './core.js';
 import { AccessError, type Principal } from './types.js';
 import { configuredOAuthUrl, createOAuthResource, oauthChallenge, type OAuthResource } from './oauth-resource.js';
@@ -179,7 +180,7 @@ export function createAgentRouter(options: AgentRouterOptions) {
       signal: AbortSignal;
     };
     const handler = createMcpHandler(() => {
-      const server = new McpServer({ name: 'mobigent-agent-access', version: '0.1.0' });
+      const server = new McpServer({ name: packageInfo.name, version: packageInfo.version });
       for (const action of actions) {
         server.registerTool(action.name, {
           title: action.title,
